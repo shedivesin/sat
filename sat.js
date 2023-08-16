@@ -1,4 +1,4 @@
-// First, lets add some simple assertions for making sure things work as we go.
+// ASSERTIONS
 
 function assert(test, message, Constructor=Error) {
   if(!test) { throw new Error(message); }
@@ -14,6 +14,8 @@ function test(actual, expected, message) {
   assert(actual === expected, `${message} (${actual} != ${expected})`);
 }
 
+
+// SAT SOLVING
 
 // Next, we're going to want to validate the input in order to prevent any
 // funny business from going on.
@@ -118,7 +120,7 @@ function is_defined(clause) {
   return clause !== null;
 }
 
-function solve_sat_recursive(formula, adjacent, open, closed) {
+function sat_recursive(formula, adjacent, open, closed) {
   // Both steps of this function will modify formula, so we make a copy of it
   // to prevent any external harm.
   formula = formula.slice();
@@ -139,7 +141,7 @@ function solve_sat_recursive(formula, adjacent, open, closed) {
 
     // Guess that the first literal remaining is true. If that works, yay!
     open.push(clause[0]);
-    if(solve_sat_recursive(formula, adjacent, open, closed)) { break; }
+    if(sat_recursive(formula, adjacent, open, closed)) { break; }
 
     // If not, rats. At least we know it's false now! Clean up our state and
     // then continue (in the current stack frame).
@@ -157,7 +159,7 @@ function by_variable_ascending(a, b) {
   return Math.abs(a) - Math.abs(b);
 }
 
-function solve_sat(formula) {
+function sat(formula) {
   // Validate the input.
   validate_formula(formula);
 
@@ -169,7 +171,7 @@ function solve_sat(formula) {
   // solving of the formula off to a recursive helper function. If it finds a
   // solution, make sure the variables are sorted before returning.
   const closed = [];
-  if(solve_sat_recursive(formula, adjacent(formula), unit(formula), closed)) {
+  if(sat_recursive(formula, adjacent(formula), unit(formula), closed)) {
     return closed.sort(by_variable_ascending);
   }
 
@@ -182,13 +184,13 @@ function solve_sat(formula) {
 // Each of these is taken from Knuth, TAOCP vol. 4 fasc. 6 "Satisfiability".
 
 test(
-  solve_sat([[1, 2], [-1, 3], [-3, 4], [1]]),
+  sat([[1, 2], [-1, 3], [-3, 4], [1]]),
   [1, 3, 4],
   "Should solve a simple 2SAT formula.",
 );
 
 test(
-  solve_sat([
+  sat([
     [1, 2, -3], [2, 3, -4], [1, 3, 4], [-1, 2, 4],
     [-1, -2, 3], [-2, -3, 4], [-3, -4, -1], [1, -2, -4],
   ]),
@@ -197,7 +199,7 @@ test(
 );
 
 test(
-  solve_sat([
+  sat([
     [1, 2, 3], [-1, -2, -3], [1, 3, 5], [-1, -3, -5],
     [1, 4, 7], [-1, -4, -7], [2, 3, 4], [-2, -3, -4],
     [2, 4, 6], [-2, -4, -6], [2, 5, 8], [-2, -5, -8],
@@ -207,4 +209,146 @@ test(
   ]),
   [1,-2,-3,4,5,-6,-7,8],
   "Should solve the van der Waerden sample problem proposed by Knuth.",
+);
+
+
+// CONSTRAINTS
+//
+// It can be tricky to write CNF clauses by hand, so we define ourselves some
+// helper functions: at_most(), at_least(), and exactly(); these allow us to
+// say that we want some number of a set of variables to be true.
+//
+// There are lots of ways to encode these constraints (see [1]). We use the
+// simplest (and least efficient) of these (the "binomial" encoding) because
+// we are only dealing with a very small problem domain, but it would be an
+// interesting exercise to explore other encodings.
+//
+// [1]: https://www.it.uu.se/research/group/astra/ModRef10/papers/Alan%20M.%20Frisch%20and%20Paul%20A.%20Giannoros.%20SAT%20Encodings%20of%20the%20At-Most-k%20Constraint%20-%20ModRef%202010.pdf
+
+function combinations(k, array, sign) {
+  const n = array.length;
+  if(!(k >= 1 & k <= n)) { return []; }
+
+  const combinations = [];
+  const c = new Array(k);
+  c[0] = -1;
+  for(let i = 0; c[0] !== n - k; ) {
+    ++c[i];
+
+    while(++i !== k) c[i] = c[i - 1] + 1;
+
+    const combination = new Array(k);
+    for(let j = 0; j < k; j++) combination[j] = array[c[j]] * sign;
+    combinations.push(combination);
+
+    while(c[--i] === n + i - k);
+  }
+
+  return combinations;
+}
+
+function at_most(k, literals) {
+  return combinations(k + 1, literals, -1);
+}
+
+function at_least(k, literals) {
+  return combinations(literals.length - k + 1, literals, 1);
+}
+
+function exactly(k, literals) {
+  return at_most(k, literals).concat(at_least(k, literals));
+}
+
+test(
+  at_most(0, [1, 2, 3]),
+  [[-1], [-2], [-3]],
+  "at_most(0,Ls) should mean each L is false.",
+);
+
+test(
+  at_most(1, [1, 2, 3]),
+  [[-1, -2], [-1, -3], [-2, -3]],
+  "at_most(1,Ls) should mean no two Ls are simultaneously true.",
+);
+
+test(
+  at_most(2, [1, 2, 3]),
+  [[-1, -2, -3]],
+  "at_most(N-1,Ls) should mean some L is false.",
+);
+
+test(
+  at_most(3, [1, 2, 3]),
+  [],
+  "at_most(N,Ls) means nothing.",
+);
+
+test(
+  at_least(0, [1, 2, 3]),
+  [],
+  "at_least(0,Ls) means nothing.",
+);
+
+test(
+  at_least(1, [1, 2, 3]),
+  [[1, 2, 3]],
+  "at_least(1,Ls) should mean some L is true.",
+);
+
+test(
+  at_least(2, [1, 2, 3]),
+  [[1, 2], [1, 3], [2, 3]],
+  "at_least(N-1,Ls) should mean no two Ls are simultaneously false.",
+);
+
+test(
+  at_least(3, [1, 2, 3]),
+  [[1], [2], [3]],
+  "at_least(N,Ls) should mean each L is true.",
+);
+
+// FIXME: Tests for exactly().
+
+
+// N-QUEENS
+//
+// Before moving onto harder and more interesting problems, let's exercise the
+// SAT solver and the constraint definitions together by solving the N-queens
+// puzzle. The definition is simple: assign a single variable to "is there a
+// queen on this square?" for each square of the board, and then make sure that
+// there's at least one queen in each row, and at most one queen in each column
+// and diagonal.
+
+test(
+  sat([
+    ...at_least(1, [ 1,  2,  3,  4]),
+    ...at_least(1, [ 5,  6,  7,  8]),
+    ...at_least(1, [ 9, 10, 11, 12]),
+    ...at_least(1, [13, 14, 15, 16]),
+    ...at_most(1, [ 1,  5,  9, 13]),
+    ...at_most(1, [ 2,  6, 10, 14]),
+    ...at_most(1, [ 3,  7, 11, 15]),
+    ...at_most(1, [ 4,  8, 12, 16]),
+    ...at_most(1, [1]),
+    ...at_most(1, [2, 5]),
+    ...at_most(1, [3, 6, 9]),
+    ...at_most(1, [4, 7, 10, 13]),
+    ...at_most(1, [8, 11, 14]),
+    ...at_most(1, [12, 15]),
+    ...at_most(1, [16]),
+    ...at_most(1, [13]),
+    ...at_most(1, [9, 14]),
+    ...at_most(1, [5, 10, 15]),
+    ...at_most(1, [1, 6, 11, 16]),
+    ...at_most(1, [2, 7, 12]),
+    ...at_most(1, [3, 8]),
+    ...at_most(1, [4]),
+  ]),
+  [
+     -1,   2,  -3,  -4,
+     -5,  -6,  -7,   8,
+      9, -10, -11, -12,
+    -13, -14,  15, -16,
+  ],
+  "Should solve the 4-Queens puzzle.",
 );
