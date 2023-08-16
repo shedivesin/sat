@@ -97,11 +97,12 @@ function simplify(clause, literal) {
 function unit_propagate(formula, adjacent, open, closed) {
   while(open.length !== 0) {
     const literal = open.shift();
-
-    // FIXME: THIS IS LUDICROUSLY INEFFICIENT. How to ensure that this can't
-    // happen in O(1) time?
     if(closed.includes(literal)) { continue; }
 
+    assert(
+      !closed.includes(-literal),
+      "Oops, we somehow assumed a contradiction.",
+    );
     closed.push(literal);
 
     for(const j of adjacent[Math.abs(literal) - 1]) {
