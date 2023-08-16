@@ -97,6 +97,11 @@ function simplify(clause, literal) {
 function unit_propagate(formula, adjacent, open, closed) {
   while(open.length !== 0) {
     const literal = open.shift();
+
+    // FIXME: THIS IS LUDICROUSLY INEFFICIENT. How to ensure that this can't
+    // happen in O(1) time?
+    if(closed.includes(literal)) { continue; }
+
     closed.push(literal);
 
     for(const j of adjacent[Math.abs(literal) - 1]) {
@@ -105,7 +110,7 @@ function unit_propagate(formula, adjacent, open, closed) {
 
       const simplified = simplify(clause, literal);
       if(simplified !== null) {
-        if(is_empty(simplified)) { return false; }
+        if(is_empty(simplified)) { open.length = 0; return false; }
         if(is_unit(simplified)) { open.push(simplified[0]); }
       }
 
@@ -355,8 +360,7 @@ test(
 );
 
 // Great! Now let's see if we can solve the real thing.
-// FIXME: Turn this into a test. It gives a wrong result, so find out why first!
-console.log(
+test(
   sat([
     ...at_least(1, [1, 2, 3, 4, 5, 6, 7, 8]),
     ...at_least(1, [9, 10, 11, 12, 13, 14, 15, 16]),
@@ -405,4 +409,15 @@ console.log(
     ...at_most(1, [7, 16]),
     ...at_most(1, [8]),
   ]),
+  [
+      1,  -2,  -3,  -4,  -5,  -6,  -7,  -8,
+     -9, -10, -11, -12,  13, -14, -15, -16,
+    -17, -18, -19, -20, -21, -22, -23,  24,
+    -25, -26, -27, -28, -29,  30, -31, -32,
+    -33, -34,  35, -36, -37, -38, -39, -40,
+    -41, -42, -43, -44, -45, -46,  47, -48,
+    -49,  50, -51, -52, -53, -54, -55, -56,
+    -57, -58, -59,  60, -61, -62, -63, -64,
+  ],
+  "Should solve the 8-Queens puzzle.",
 );
