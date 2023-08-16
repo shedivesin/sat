@@ -1,3 +1,5 @@
+// First, lets add some simple assertions for making sure things work as we go.
+
 function assert(test, message, Constructor=Error) {
   if(!test) { throw new Error(message); }
 }
@@ -11,6 +13,10 @@ function test(actual, expected, message) {
   expected = JSON.stringify(expected);
   assert(actual === expected, `${message} (${actual} != ${expected})`);
 }
+
+
+// Next, we're going to want to validate the input in order to prevent any
+// funny business from going on.
 
 function validate_literal(literal) {
   validate(
@@ -29,9 +35,15 @@ function validate_formula(formula) {
   formula.forEach(validate_clause);
 }
 
+
 function is_empty(array) {
   return array.length === 0;
 }
+
+function is_unit(array) {
+  return array.length === 1;
+}
+
 
 function adjacent(formula) {
   const adjacent = [];
@@ -64,6 +76,7 @@ function unit(formula) {
   return open;
 }
 
+
 function simplify(clause, literal) {
   const simplified = [];
   for(const candidate of clause) {
@@ -74,9 +87,11 @@ function simplify(clause, literal) {
   return simplified;
 }
 
-// Apply unit propagation to the given formula. Formula will be modified
-// in-place (but only shallowly---no subarrays will be modified). Adjacent will
-// not be modified. Open will be truncated. Closed may be appended to.
+// Apply unit propagation, returning true if we were able to do so successfully
+// and false if we ran into a contradiction. This function will modify formula
+// in-place. If it succeeds, open will be left empty; if not, open's state
+// will be undefined (e.g. you will want to clear it before using it again).
+// Closed will be appended to.
 function unit_propagate(formula, adjacent, open, closed) {
   while(open.length !== 0) {
     const literal = open.shift();
@@ -86,13 +101,10 @@ function unit_propagate(formula, adjacent, open, closed) {
       const clause = formula[j];
       if(clause === null) { continue; }
 
-      let simplified = simplify(clause, literal);
-      if(simplified !== null && simplified.length === 0) {
-        unit.length = 0;
-        return false;
-      }
-      if(simplified !== null && simplified.length === 1) {
-        open.push(simplified[0]);
+      const simplified = simplify(clause, literal);
+      if(simplified !== null) {
+        if(is_empty(simplified)) { return false; }
+        if(is_unit(simplified)) { open.push(simplified[0]); }
       }
 
       formula[j] = simplified;
@@ -103,7 +115,7 @@ function unit_propagate(formula, adjacent, open, closed) {
 }
 
 function is_defined(clause) {
-  return clause !== null && clause.length >= 2;
+  return clause !== null;
 }
 
 function solve_sat_recursive(formula, adjacent, open, closed) {
@@ -122,21 +134,24 @@ function solve_sat_recursive(formula, adjacent, open, closed) {
     if(clause === undefined) { break; }
 
     // Remember what we're sure of so far, so if our guess is wrong, we can
-    // back up to it.
+    // restore our state.
     const closed_length = closed.length;
 
     // Guess that the first literal remaining is true. If that works, yay!
     open.push(clause[0]);
     if(solve_sat_recursive(formula, adjacent, open, closed)) { break; }
 
-    // If not, rats. At least we know it's false now! Back up to what we're
-    // sure of, and then continue (in the current stack frame).
+    // If not, rats. At least we know it's false now! Clean up our state and
+    // then continue (in the current stack frame).
+    open.length = 0;
     closed.length = closed_length;
+
     open.push(-clause[0]);
   }
 
   return true;
 }
+
 
 function by_variable_ascending(a, b) {
   return Math.abs(a) - Math.abs(b);
