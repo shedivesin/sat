@@ -412,3 +412,225 @@ assert_equal(
   ],
   "Should solve the 8-Queens puzzle.",
 );
+
+
+// ADVANCED DUNGEONS AND DIAGRAMS
+//
+// Advanced Dungeons and Diagrams is a cute little pen-and-paper puzzle game
+// made by Zach Barth[1]. I really enjoyed it and solved all the puzzles right
+// away. When his company, Zachtronics, published a digital version[2], I
+// really enjoyed it and solved all the puzzles right away, too. Well, almost.
+// See, after you beat all of the hand-designed puzzles, the game unlocks an
+// "infinite dungeon" that randomly generates new puzzles for you. I wanted
+// to beat all of the puzzles! But how could I possibly beat an infinite number
+// of them?
+//
+// The answer, of course, is to write a program to solve them all for me. While
+// I could write a bespoke solver JUST for AD&D puzzles, I've always wanted to
+// dig into SAT solving, and this was a good opportunity to do so. So now I've
+// learned a bunch about SAT and also have a tool handy in case I ever want to
+// solve other logic puzzles, too.
+//
+// [1]: https://trashworldnews.com/files/advanced_dungeons_and_diagrams.pdf
+// [2]: https://www.zachtronics.com/last-call-bbs/
+
+// Enumerate N numbers starting at start and incrementing by step
+function enumerate(n, start, step) {
+  const ns = new Array(n);
+  for(let i = 0; i < n; i++, start += step) { ns[i] = start; }
+
+  return ns;
+}
+
+function dungeons_and_diagrams(diagram) {
+  const match = /^ *(.+)\n+ *([0-8]{8})\n *([0-8])([\.MT]{8})\n *([0-8])([\.MT]{8})\n *([0-8])([\.MT]{8})\n *([0-8])([\.MT]{8})\n *([0-8])([\.MT]{8})\n *([0-8])([\.MT]{8})\n *([0-8])([\.MT]{8})\n *([0-8])([\.MT]{8})$/gm.exec(diagram);
+  if(match === null) { throw new RangeError("Input wasn't in diagram format"); }
+
+  const name = match[1];
+  const cols = match[2];
+  const rows = [
+    match[3], match[5], match[7], match[9],
+    match[11], match[13], match[15], match[17],
+  ];
+  const monsters = [];
+  const treasures = [];
+  for(let y = 0; y < 8; y++) {
+    const row = match[4 + y * 2];
+    for(let x = 0; x < 8; x++) {
+      switch(row.charCodeAt(x)) {
+        case 77: monsters.push([x, y]); break;
+        case 84: treasures.push([x, y]); break;
+      }
+    }
+  }
+
+  // FIXME: Support treasures, too.
+  if(treasures.length !== 0) {
+    console.warn("Didn't attempt to solve %s", name);
+    return;
+  }
+
+  // Convert to CNF.
+  const formula = [];
+
+  // There are no walls where there are monsters or treasures.
+  for(const [x, y] of [...monsters, ...treasures]) {
+    formula.push([-(y * 8 + x + 1)]);
+  }
+
+  // There should be exactly N filled squares per column and row.
+  for(let i = 0; i < 8; i++) {
+    formula.push(...exactly(+cols[i], enumerate(8, i + 1, 8)));
+    formula.push(...exactly(+rows[i], enumerate(8, i * 8 + 1, 1)));
+  }
+
+  // There should be at least 1 wall in every 2x2 square.
+  // FIXME: Unless we're in a treasure room!
+  for(let y = 0; y < 7; y++) {
+    for(let x = 0; x < 7; x++) {
+      formula.push(...at_least(1, [y * 8 + x + 1, y * 8 + x + 2, y * 8 + x + 9, y * 8 + x + 10]));
+    }
+  }
+
+  // Each monster should be in a dead end.
+  for(const [x, y] of monsters) {
+    const set = [];
+    if(x >= 1) { set.push(y * 8 + x); }
+    if(x <= 6) { set.push(y * 8 + x + 2); }
+    if(y >= 1) { set.push(y * 8 + x - 7); }
+    if(y <= 6) { set.push(y * 8 + x + 9); }
+    formula.push(...exactly(set.length - 1, set));
+  }
+
+  const solutions = solve(formula);
+  if(solutions.length !== 1) {
+    console.warn("Failed to solve %s (%d solutions)", name, solutions.length);
+    return;
+  }
+}
+
+dungeons_and_diagrams(`
+  Tenaxxus's Gullet
+
+   44262347
+  7.....M..
+  3........
+  4.T......
+  1........
+  7........
+  1M.......
+  6........
+  3..M....M
+`);
+
+dungeons_and_diagrams(`
+  The Twin Cities of the Dead
+
+   13153435
+  5........
+  2..T.T...
+  2........
+  3........
+  6M.......
+  0........
+  6........
+  1....M.M.
+`);
+
+dungeons_and_diagrams(`
+  The Gardens of Hell
+
+   14363144
+  6M......M
+  0........
+  4........
+  1.......M
+  5M.......
+  3........
+  3....T...
+  4M.......
+`);
+
+dungeons_and_diagrams(`
+  The House Penumbral
+
+   04073432
+  6M.M.....
+  2.......T
+  3........
+  1........
+  5........
+  1........
+  4........
+  1......M.
+`);
+
+dungeons_and_diagrams(`
+  The Maze of the Minotaur
+
+   72613261
+  0M.......
+  7........
+  3.M.T....
+  3........
+  3........
+  5........
+  2........
+  5........
+`);
+
+dungeons_and_diagrams(`
+  The Halls of the Golemancer
+
+   53246415
+  6.....M..
+  3.......M
+  3..T..M..
+  3.......M
+  5.....M..
+  3.......M
+  4........
+  3........
+`);
+
+dungeons_and_diagrams(`
+  The Tomb of the Broken God
+
+   13326241
+  1.T..M...
+  4........
+  1........
+  6........
+  2.......M
+  2........
+  5........
+  1.....M..
+`);
+
+dungeons_and_diagrams(`
+  The Hive of Great Sorrow
+
+   36054063
+  6..M..M..
+  2M......M
+  4........
+  3....M...
+  2........
+  4........
+  2M......M
+  4........
+`);
+
+dungeons_and_diagrams(`
+  The Lair of the Elemental King
+
+   52125423
+  4.......M
+  1........
+  4..M.....
+  2........
+  6........
+  2........
+  3...T....
+  2........
+`);
