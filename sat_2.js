@@ -123,8 +123,6 @@ assert_equal(
     [4, 5, 6], [-4, -5, -6], [4, 6, 8], [-4, -6, -8],
     [5, 6, 7], [-5, -6, -7], [6, 7, 8], [-6, -7, -8],
   ]),
-  // FIXME: This is gross. It would be better if these were in lexicographic
-  // order.
   [
     [ 1, -2, -3,  4, -7,  5, -6,  8],
     [ 1, -2,  3, -5, -4,  6,  8, -7],
