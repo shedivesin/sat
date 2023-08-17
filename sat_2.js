@@ -14,16 +14,6 @@ function assert_equal(actual, expected, message) {
   assert(JSON.stringify(actual) === JSON.stringify(expected), message);
 }
 
-function assert_includes(actuals, expected, message) {
-  for(const actual of actuals) {
-    if(JSON.stringify(actual) === expected) {
-      return;
-    }
-  }
-
-  assert(false, message);
-}
-
 
 // BOOLEAN SATISFIABILITY PROBLEM
 //
@@ -32,6 +22,8 @@ function assert_includes(actuals, expected, message) {
 // programming language, where one gives the computer a number of parameters
 // and the constraints that act upon those parameters, and then asks the
 // computer to find which values of the parameters satisfy those constraints.
+// It turns out that this is a very natural way to express logic puzzles (among
+// others).
 //
 // There are a number of ways to solve the problem. The main categories are
 // recursive search on variables, recursive search on clauses, and stochastic
@@ -142,4 +134,125 @@ assert_equal(
     [-1, -2,  3,  4, -5,  8, -6,  7],
   ],
   "Should solve the van der Waerden sample problem proposed by Knuth.",
+);
+
+
+// CONSTRAINT DEFINITION
+//
+// It can be tricky to write CNF clauses by hand, so we define ourselves some
+// helper functions: at_most(), at_least(), and exactly(); these allow us to
+// say that we want some number of a set of variables to be true.
+//
+// There are lots of ways to encode these constraints (see [1]). Since this is
+// just a toy, we use the simplest (and least efficient) of these, called the
+// "binomial" encoding. It would be an interesting exercise to explore some of
+// the other encodings, though.
+//
+// [1]: https://www.it.uu.se/research/group/astra/ModRef10/papers/Alan%20M.%20Frisch%20and%20Paul%20A.%20Giannoros.%20SAT%20Encodings%20of%20the%20At-Most-k%20Constraint%20-%20ModRef%202010.pdf
+
+function combinations(k, array, sign) {
+  const n = array.length;
+  if(!(k >= 1 & k <= n)) { return []; }
+
+  const combinations = [];
+  const c = new Array(k);
+  c[0] = -1;
+
+  for(let i = 0; c[0] !== n - k; ) {
+    ++c[i];
+
+    while(++i !== k) c[i] = c[i - 1] + 1;
+
+    const combination = new Array(k);
+    for(let j = 0; j < k; j++) combination[j] = array[c[j]] * sign;
+    combinations.push(combination);
+
+    while(c[--i] === n + i - k);
+  }
+
+  return combinations;
+}
+
+function at_most(k, literals) {
+  return combinations(k + 1, literals, -1);
+}
+
+function at_least(k, literals) {
+  return combinations(literals.length - k + 1, literals, 1);
+}
+
+function exactly(k, literals) {
+  return at_most(k, literals).concat(at_least(k, literals));
+}
+
+assert_equal(
+  at_most(0, [1, 2, 3]),
+  [[-1], [-2], [-3]],
+  "at_most(0,Ls) should mean each L is false.",
+);
+
+assert_equal(
+  at_most(1, [1, 2, 3]),
+  [[-1, -2], [-1, -3], [-2, -3]],
+  "at_most(1,Ls) should mean no two Ls are simultaneously true.",
+);
+
+assert_equal(
+  at_most(2, [1, 2, 3]),
+  [[-1, -2, -3]],
+  "at_most(N-1,Ls) should mean some L is false.",
+);
+
+assert_equal(
+  at_most(3, [1, 2, 3]),
+  [],
+  "at_most(N,Ls) means nothing.",
+);
+
+assert_equal(
+  at_least(0, [1, 2, 3]),
+  [],
+  "at_least(0,Ls) means nothing.",
+);
+
+assert_equal(
+  at_least(1, [1, 2, 3]),
+  [[1, 2, 3]],
+  "at_least(1,Ls) should mean some L is true.",
+);
+
+assert_equal(
+  at_least(2, [1, 2, 3]),
+  [[1, 2], [1, 3], [2, 3]],
+  "at_least(N-1,Ls) should mean no two Ls are simultaneously false.",
+);
+
+assert_equal(
+  at_least(3, [1, 2, 3]),
+  [[1], [2], [3]],
+  "at_least(N,Ls) should mean each L is true.",
+);
+
+assert_equal(
+  exactly(0, [1, 2, 3]),
+  [[-1], [-2], [-3]],
+  "exactly(0,Ls) should mean each L is false.",
+);
+
+assert_equal(
+  exactly(1, [1, 2, 3]),
+  [[-1, -2], [-1, -3], [-2, -3], [1, 2, 3]],
+  "exactly(1,Ls) should mean some L is true but no two Ls are.",
+);
+
+assert_equal(
+  exactly(2, [1, 2, 3]),
+  [[-1, -2, -3], [1, 2], [1, 3], [2, 3]],
+  "exactly(N-1,Ls) should mean some L is false but no two Ls are.",
+);
+
+assert_equal(
+  exactly(3, [1, 2, 3]),
+  [[1], [2], [3]],
+  "exactly(N,Ls) should mean each L is true.",
 );
