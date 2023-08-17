@@ -264,7 +264,7 @@ function at_least(k, literals) {
 }
 
 function exactly(k, literals) {
-  return at_most(k, literals).concat(at_least(k, literals));
+  return [...at_most(k, literals), ...at_least(k, literals)];
 }
 
 test(
@@ -424,3 +424,265 @@ test(
   ],
   "Should solve the 8-Queens puzzle.",
 );
+
+
+// ADVANCED DUNGEONS AND DIAGRAMS
+//
+// AD&D[1] is a cute little pen-and-paper puzzle game by Zach Barth. I enjoyed
+// it when I saw it, and later on a digital version was released as a part of
+// the video game Last Call BBS[2]. I enjoyed solving all these puzzles too,
+// but after beating all the puzzles in the game, you unlock an "infinite
+// dungeon" that randomly generates new puzzles for you. How could I possibly
+// beat an infinite number of puzzles? By writing a computer program to solve
+// them for me, of course. But why stop at AD&D puzzles? Why not solve ANY
+// puzzle? And that's why this little piece of software exists.
+//
+// [1]: https://trashworldnews.com/files/advanced_dungeons_and_diagrams.pdf
+// [2]: https://www.zachtronics.com/last-call-bbs/
+
+// Parse a string digit ("7") into a number (7)
+function digit(c) {
+  return c.charCodeAt(0) - 48;
+}
+
+// Enumerate `n` numbers starting at `start` and incrementing by `step`
+function enumerate(n, start, step) {
+  const ns = new Array(n);
+  for(let i = 0; i < n; i++, start += step) { ns[i] = start; }
+
+  return ns;
+}
+
+// Positive numbers are printed as walls, negative numbers as spaces.
+function print(variable) {
+  return (variable >= 0)? "#": " ";
+}
+
+// Parse and solve an Advanced Dungeons and Diagrams puzzle.
+function dungeons_and_diagrams(input) {
+  // Parse diagram input
+  const match = /^ *(.+)\n+ *([0-8]{8})\n *([0-8])([ MT]{0,8})\n *([0-8])([ MT]{0,8})\n *([0-8])([ MT]{0,8})\n *([0-8])([ MT]{0,8})\n *([0-8])([ MT]{0,8})\n *([0-8])([ MT]{0,8})\n *([0-8])([ MT]{0,8})\n *([0-8])([ MT]{0,8})$/gm.exec(input);
+  if(match === null) throw new RangeError("Input wasn't in diagram format");
+
+  const name = match[1];
+  const cols = Array.from(match[2], digit);
+  const rows = [
+    digit(match[3]), digit(match[5]), digit(match[7]), digit(match[9]),
+    digit(match[11]), digit(match[13]), digit(match[15]), digit(match[17]),
+  ];
+  const monsters = [];
+  const treasures = [];
+  for(let y = 0; y < 8; y++) {
+    const row = match[4 + y * 2];
+    for(let x = 0; x < row.length; x++) {
+      switch(row.charCodeAt(x)) {
+        case 77: monsters.push([x, y]); break;
+        case 84: treasures.push([x, y]); break;
+      }
+    }
+  }
+
+  // FIXME: Support treasures, too.
+  if(treasures.length !== 0) {
+    console.warn("Didn't attempt to solve %s", name);
+    return;
+  }
+
+  // Convert to CNF.
+  const formula = [];
+
+  // There should be exactly N filled squares per column and row.
+  for(let i = 0; i < 8; i++) {
+    formula.push(...exactly(cols[i], enumerate(8, i + 1, 8)));
+    formula.push(...exactly(rows[i], enumerate(8, i * 8 + 1, 1)));
+  }
+
+  // There should be at least 1 wall in every 2x2 square.
+  // FIXME: Unless we're in a treasure room!
+  for(let y = 8; y < 64; y += 8) {
+    for(let x = 1; x < 8; x++) {
+      formula.push(...at_least(1, [y + x - 8, y + x - 7, y + x, y + x + 1]));
+    }
+  }
+
+  // There are no walls where there are monsters or treasures.
+  for(const [x, y] of [...monsters, ...treasures]) {
+    formula.push([-(y * 8 + x + 1)]);
+  }
+
+  // Each monster should be in a dead end.
+  for(const [x, y] of monsters) {
+    const set = [];
+    if(x >= 1) { set.push(y * 8 + x); }
+    if(x <= 6) { set.push(y * 8 + x + 2); }
+    if(y >= 1) { set.push(y * 8 + x + 7); }
+    if(y <= 6) { set.push(y * 8 + x + 9); }
+    formula.push(...exactly(set.length - 1, set));
+  }
+
+  const assignment = sat(formula);
+  if(assignment === null) {
+    console.warn("Failed to solve %s", name);
+    return;
+  }
+
+  const output = [
+    assignment.slice( 0,  8).map(print),
+    assignment.slice( 8, 16).map(print),
+    assignment.slice(16, 24).map(print),
+    assignment.slice(24, 32).map(print),
+    assignment.slice(32, 40).map(print),
+    assignment.slice(40, 48).map(print),
+    assignment.slice(48, 56).map(print),
+    assignment.slice(56, 64).map(print),
+  ];
+  for(const [x, y] of monsters) {
+    output[y][x] = "M";
+  }
+  for(const [x, y] of treasures) {
+    output[y][x] = "T";
+  }
+
+  console.log(
+    "%s\n\n   %s\n  %s%s\n  %s%s\n  %s%s\n  %s%s\n  %s%s\n  %s%s\n  %s%s\n  %s%s\n",
+    name,
+    cols.join(""),
+    rows[0], output[0].join(""),
+    rows[1], output[1].join(""),
+    rows[2], output[2].join(""),
+    rows[3], output[3].join(""),
+    rows[4], output[4].join(""),
+    rows[5], output[5].join(""),
+    rows[6], output[6].join(""),
+    rows[7], output[7].join(""),
+  );
+}
+
+
+
+
+dungeons_and_diagrams(`
+  Tenaxxus's Gullet
+
+   44262347
+  7     M
+  3
+  4 T
+  1
+  7
+  1M
+  6
+  3  M    M
+`);
+
+dungeons_and_diagrams(`
+  The Twin Cities of the Dead
+
+   13153435
+  5
+  2  T T
+  2
+  3
+  6M
+  0
+  6
+  1    M M
+`);
+
+dungeons_and_diagrams(`
+  The Gardens of Hell
+
+   14363144
+  6M      M
+  0
+  4
+  1       M
+  5M
+  3
+  3    T
+  4M
+`);
+
+dungeons_and_diagrams(`
+  The House Penumbral
+
+   04073432
+  6M M
+  2       T
+  3
+  1
+  5
+  1
+  4
+  1      M
+`);
+
+dungeons_and_diagrams(`
+  The Maze of the Minotaur
+
+   72613261
+  0M
+  7
+  3 M T
+  3
+  3
+  5
+  2
+  5
+`);
+
+dungeons_and_diagrams(`
+  The Halls of the Golemancer
+
+   53246415
+  6     M
+  3       M
+  3  T  M
+  3       M
+  5     M
+  3       M
+  4
+  3
+`);
+
+dungeons_and_diagrams(`
+  The Tomb of the Broken God
+
+   13326241
+  1 T  M
+  4
+  1
+  6
+  2       M
+  2
+  5
+  1     M
+`);
+
+dungeons_and_diagrams(`
+  The Hive of Great Sorrow
+
+   36054063
+  6  M  M
+  2M      M
+  4
+  3    M
+  2
+  4
+  2M      M
+  4
+`);
+
+dungeons_and_diagrams(`
+  The Lair of the Elemental King
+
+   52125423
+  4       M
+  1
+  4  M
+  2
+  6
+  2
+  3   T
+  2
+`);
