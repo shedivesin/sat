@@ -68,11 +68,11 @@ function adjacent(formula) {
 
 function unit(formula) {
   const open = [];
+  const n = formula.length;
 
-  for(const clause of formula) {
-    if(clause.length === 1) {
-      open.push(clause[0]);
-    }
+  for(let i = 0; i < n; i++) {
+    const clause = formula[i];
+    if(is_unit(clause)) { open.push(i); }
   }
 
   return open;
@@ -96,13 +96,13 @@ function simplify(clause, literal) {
 // Closed will be appended to.
 function unit_propagate(formula, adjacent, open, closed) {
   while(open.length !== 0) {
-    const literal = open.shift();
-    if(closed.includes(literal)) { continue; }
+    const i = open.shift();
+    const clause = formula[i];
+    if(clause === null) { continue; }
 
-    assert(
-      !closed.includes(-literal),
-      "Oops, we somehow assumed a contradiction.",
-    );
+    formula[i] = null;
+
+    const literal = clause[0];
     closed.push(literal);
 
     for(const j of adjacent[Math.abs(literal) - 1]) {
@@ -112,7 +112,7 @@ function unit_propagate(formula, adjacent, open, closed) {
       const simplified = simplify(clause, literal);
       if(simplified !== null) {
         if(is_empty(simplified)) { open.length = 0; return false; }
-        if(is_unit(simplified)) { open.push(simplified[0]); }
+        if(is_unit(simplified)) { open.push(j); }
       }
 
       formula[j] = simplified;
@@ -138,23 +138,25 @@ function sat_recursive(formula, adjacent, open, closed) {
     // Check if any clauses are still present in the formula. (These will be
     // non-unit clauses.) If not, we're done, hooray! If there are, though,
     // then make a guess and recursively see if that gets us anywhere.
-    const clause = formula.find(is_defined);
-    if(clause === undefined) { break; }
+    const i = formula.findIndex(is_defined);
+    if(i === -1) { break; }
 
     // Remember what we're sure of so far, so if our guess is wrong, we can
     // restore our state.
+    const formula_length = formula.length;
     const closed_length = closed.length;
 
     // Guess that the first literal remaining is true. If that works, yay!
-    open.push(clause[0]);
+    formula.push([formula[i][0]]);
+    open.push(formula_length);
     if(sat_recursive(formula, adjacent, open, closed)) { break; }
 
     // If not, rats. At least we know it's false now! Clean up our state and
     // then continue (in the current stack frame).
-    open.length = 0;
+    formula[formula_length][0] *= -1;
+    open.length = 1;
+    open[0] = formula_length;
     closed.length = closed_length;
-
-    open.push(-clause[0]);
   }
 
   return true;
