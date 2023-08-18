@@ -502,10 +502,35 @@ function dungeons_and_diagrams(diagram) {
     formula.push(...exactly(set.length - 1, set));
   }
 
+  // FIXME: There should be no dead ends EXCEPT for monsters.
+
   const solutions = solve(formula);
-  if(solutions.length !== 1) {
-    console.warn("Failed to solve %s (%d solutions)", name, solutions.length);
-    return;
+  for(const solution of solutions) {
+    const grid = new Array(64).fill(".");
+    for(const literal of solution) {
+      if(literal < 0) { continue; }
+      grid[literal - 1] = "#";
+    }
+    for(const [x, y] of monsters) {
+      grid[y * 8 + x] = "M";
+    }
+    for(const [x, y] of treasures) {
+      grid[y * 8 + x] = "T";
+    }
+
+    console.log(
+      "%s\n\n   %s\n  %s%s\n  %s%s\n  %s%s\n  %s%s\n  %s%s\n  %s%s\n  %s%s\n  %s%s\n",
+      name,
+      cols,
+      rows[0], grid.slice( 0,  8).join(""),
+      rows[1], grid.slice( 8, 16).join(""),
+      rows[2], grid.slice(16, 24).join(""),
+      rows[3], grid.slice(24, 32).join(""),
+      rows[4], grid.slice(32, 40).join(""),
+      rows[5], grid.slice(40, 48).join(""),
+      rows[6], grid.slice(48, 56).join(""),
+      rows[7], grid.slice(56, 64).join(""),
+    );
   }
 }
 
