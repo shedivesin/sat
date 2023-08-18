@@ -37,6 +37,9 @@ function assert_equal(actual, expected, message) {
 //
 // [1]: https://web.archive.org/web/20201109101535/http://www.cse.chalmers.se/~algehed/blogpostsHTML/SAT.html
 
+// If clause contains literal, the clause is satisfied: return null. Otherwise,
+// return the clause with all instances of -literal removed. (If clause does
+// not contain any instances of -literal, the original array is returned.)
 function simplify_clause(clause, literal) {
   const n = clause.length;
 
@@ -45,6 +48,23 @@ function simplify_clause(clause, literal) {
     if(l === literal) { return null; }
     if(l !== -literal) { continue; }
 
+    // This bizarre construction is because that motherfucker Edsger Dijkstra
+    // published a paper in the sixties telling everyone that GOTO is evil and
+    // so people stopped writing programming languages with it, even though
+    // it's MUCH cleaner in cases like this one.
+    //
+    // The idea here is that we just want to scan through the clause as quickly
+    // as we can until we hit -literal. At that point, we effectively break out
+    // of the original loop, make a copy of the clause, and copy over
+    // everything that isn't -literal. Once we're done, we truncate off the
+    // wasted space and return it.
+    //
+    // Why not just break out of the original loop? Well, then we'd need an
+    // entirely superfluous if statement to find out WHY we exited the loop
+    // (either the end of input, or because we hit -literal). Could we rewrite
+    // the loop to iterate until we hit -literal? Sure, and it'd be plenty
+    // efficient, but the code would be a lot longer. In the end, I think this
+    // construction is the best I can do, but I REALLY JUST WISH I HAD GOTO.
     clause = clause.slice();
     let j = i++;
 
@@ -61,6 +81,8 @@ function simplify_clause(clause, literal) {
   return clause;
 }
 
+// Return a copy of the formula with all clauses containing literal removed,
+// and with all instances of -literal removed from their respective clauses.
 // NB: Unlike simplify_clause(), simplify_formula() always makes a copy of
 // the original formula. This is simply because it is only ever called with
 // literals that are known to be in it, so it will always be modified.
@@ -81,19 +103,30 @@ function simplify_formula(formula, literal) {
   return f;
 }
 
+// Prepend literal to every solution in a list of solutions. This modified the
+// input arrays, which is a little evil, but it's safe in this case since the
+// input arrays (in solve()) are never used elsewhere.
 function prepend(solutions, literal) {
   const n = solutions.length;
-  for(let i = 0; i < n; i++) {
-    solutions[i].unshift(literal);
-  }
+  for(let i = 0; i < n; i++) { solutions[i].unshift(literal); }
 
   return solutions;
 }
 
+// Return EVERY POSSIBLE solution to the given CNF formula. (An empty array
+// means there are no solutions and the formula is UNSAT.)
+// NB: Be careful! There may be many!
 function solve(formula) {
+  // A null formula is one in which a contradiction has been found. (See
+  // simplify_formula().) That's UNSAT, so return no solutions.
   if(formula === null) { return []; }
+
+  // A formula with no clauses has a trivial solution.
   if(formula.length === 0) { return [[]]; }
 
+  // Pick an arbitrary variable from the formula, and (recursively) try to
+  // solve the formulas that result from assuming it to be either true or
+  // false. If we find any solutions, simply prepend our assumptions to them.
   const l = formula[0][0];
   return prepend(solve(simplify_formula(formula, l)), l).
     concat(prepend(solve(simplify_formula(formula, -l)), -l));
