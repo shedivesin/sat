@@ -9,8 +9,8 @@ function assert(test, message) {
 }
 
 function assert_equal(actual, expected, message) {
-  // HACK: JSON.stringify() is, in fact, a horrible way to test deep equality.
-  // Good enough for government work [shrug emoji].
+  // HACK: JSON.stringify() is, in fact, a horrible way to test deep equality,
+  // but it's good enough for government work [shrug emoji].
   assert(JSON.stringify(actual) === JSON.stringify(expected), message);
 }
 
@@ -103,7 +103,7 @@ function simplify_formula(formula, literal) {
   return f;
 }
 
-// Prepend literal to every solution in a list of solutions. This modified the
+// Prepend literal to every solution in a list of solutions. This modifies the
 // input arrays, which is a little evil, but it's safe in this case since the
 // input arrays (in solve()) are never used elsewhere.
 function prepend(solutions, literal) {
@@ -192,13 +192,13 @@ function combinations(k, array, sign) {
   for(let i = 0; c[0] !== n - k; ) {
     ++c[i];
 
-    while(++i !== k) c[i] = c[i - 1] + 1;
+    while(++i !== k) { c[i] = c[i - 1] + 1; }
 
     const combination = new Array(k);
-    for(let j = 0; j < k; j++) combination[j] = array[c[j]] * sign;
+    for(let j = 0; j < k; j++) { combination[j] = array[c[j]] * sign; }
     combinations.push(combination);
 
-    while(c[--i] === n + i - k);
+    while(c[--i] === n + i - k) { }
   }
 
   return combinations;
