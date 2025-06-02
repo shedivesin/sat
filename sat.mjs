@@ -43,21 +43,28 @@ function assert_equal(actual, expected, message) {
 // original array is returned.)
 function simplify_clause(clause, literal) {
   const n = clause.length;
-  let i = 0;
-  let j = 0;
-  while(i < n) {
-    const l = clause[i++];
-    if(l === +literal) { return null; }
-    if(l === -literal) { j++; }
-  }
-  if(j === 0) { return clause; }
 
-  const simplified = new Array(n - j);
-  i = 0;
-  j = 0;
-  while(i < n) {
-    const l = clause[i++];
-    if(l !== -literal) { simplified[j++] = l; }
+  // If clause contains literal, return null. Also count how many times clause
+  // contains -literal.
+  let i = n;
+  let j = 0;
+  while(i) {
+    const l = clause[--i];
+    if(l ===  literal) { return null; }
+    if(l === -literal) { ++j; }
+  }
+
+  // OPTIMIZATION: If clause contains -literal zero times, then just return it.
+  // This prevents us from allocating a new array.
+  if(!j) { return clause; }
+
+  // Create and return a copy of clause with all instances of -literal removed.
+  i = n;
+  j = n - j;
+  const simplified = new Array(j);
+  while(i) {
+    const l = clause[--i];
+    if(l !== -literal) { simplified[--j] = l; }
   }
 
   return simplified;
@@ -72,7 +79,6 @@ function simplify_formula(formula, literal) {
   const n = formula.length;
   const f = new Array(n);
   let j = 0;
-
   for(let i = 0; i < n; i++) {
     const c = simplify_clause(formula[i], literal);
     if(c === null) { continue; }
