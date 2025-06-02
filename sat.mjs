@@ -38,47 +38,29 @@ function assert_equal(actual, expected, message) {
 // [1]: https://web.archive.org/web/20201109101535/http://www.cse.chalmers.se/~algehed/blogpostsHTML/SAT.html
 
 // If clause contains literal, the clause is satisfied: return null. Otherwise,
-// return the clause with all instances of -literal removed. (If clause does
-// not contain any instances of -literal, the original array is returned.)
+// return the clause with all instances of -literal removed. (As an
+// optimization, if clause does not contain any instances of -literal, the
+// original array is returned.)
 function simplify_clause(clause, literal) {
   const n = clause.length;
+  let i = 0;
+  let j = 0;
+  while(i < n) {
+    const l = clause[i++];
+    if(l === +literal) { return null; }
+    if(l === -literal) { j++; }
+  }
+  if(j === 0) { return clause; }
 
-  for(let i = 0; i < n; i++) {
-    const l = clause[i];
-    if(l === literal) { return null; }
-    if(l !== -literal) { continue; }
-
-    // This bizarre construction is because that motherfucker Edsger Dijkstra
-    // published a paper in the sixties telling everyone that GOTO is evil and
-    // so people stopped writing programming languages with it, even though
-    // it's MUCH cleaner in cases like this one.
-    //
-    // The idea here is that we just want to scan through the clause as quickly
-    // as we can until we hit -literal. At that point, we effectively break out
-    // of the original loop, make a copy of the clause, and copy over
-    // everything that isn't -literal. Once we're done, we truncate off the
-    // wasted space and return it.
-    //
-    // Why not just break out of the original loop? Well, then we'd need an
-    // entirely superfluous if statement to find out WHY we exited the loop
-    // (either the end of input, or because we hit -literal). Could we rewrite
-    // the loop to iterate until we hit -literal? Sure, and it'd be plenty
-    // efficient, but the code would be a lot longer. In the end, I think this
-    // construction is the best I can do, but I REALLY JUST WISH I HAD GOTO.
-    clause = clause.slice();
-    let j = i++;
-
-    for(; i < n; i++) {
-      const l = clause[i];
-      if(l === literal) { return null; }
-      if(l !== -literal) { clause[j++] = l; }
-    }
-
-    clause.length = j;
-    break;
+  const simplified = new Array(n - j);
+  i = 0;
+  j = 0;
+  while(i < n) {
+    const l = clause[i++];
+    if(l !== -literal) { simplified[j++] = l; }
   }
 
-  return clause;
+  return simplified;
 }
 
 // Return a copy of the formula with all clauses containing literal removed,
@@ -445,7 +427,6 @@ assert_equal(
   ],
   "Should solve the 8-Queens puzzle.",
 );
-
 
 // ADVANCED DUNGEONS AND DIAGRAMS
 //
