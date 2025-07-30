@@ -108,30 +108,43 @@ function solve_any(formula) {
   return null;
 }
 
-assert_equal(
-  solve_all([[1, 2], [-1, 3], [-3, 4], [1]]),
+function assert_solve(formula, solutions, description) {
+  assert_equal(
+    solve_all(formula),
+    solutions,
+    `Should give all solutions to ${description}.`,
+  );
+  assert_equal(
+    solve_any(formula),
+    solutions[0] ?? null,
+    `Should give any solution to ${description}.`,
+  );
+}
+
+assert_solve(
+  [[1, 2], [-1, 3], [-3, 4], [1]],
   [[1, 3, 4]],
-  "Should solve a simple 2SAT formula.",
+  "a simple 2SAT formula",
 );
 
-assert_equal(
-  solve_all([
+assert_solve(
+  [
     [1, 2, -3], [2, 3, -4], [1, 3, 4], [-1, 2, 4],
     [-1, -2, 3], [-2, -3, 4], [-3, -4, -1], [1, -2, -4],
-  ]),
+  ],
   [],
-  "Should fail to solve \"the shortest interesting formula in 3CNF.\"",
+  "the \"shortest interesting formula in 3CNF\"",
 );
 
-assert_equal(
-  solve_all([
+assert_solve(
+  [
     [1, 2, 3], [-1, -2, -3], [1, 3, 5], [-1, -3, -5],
     [1, 4, 7], [-1, -4, -7], [2, 3, 4], [-2, -3, -4],
     [2, 4, 6], [-2, -4, -6], [2, 5, 8], [-2, -5, -8],
     [3, 4, 5], [-3, -4, -5], [3, 5, 7], [-3, -5, -7],
     [4, 5, 6], [-4, -5, -6], [4, 6, 8], [-4, -6, -8],
     [5, 6, 7], [-5, -6, -7], [6, 7, 8], [-6, -7, -8],
-  ]),
+  ],
   [
     [ 1, -2, -3,  4, -7,  5, -6,  8],
     [ 1, -2,  3, -5, -4,  6,  8, -7],
@@ -140,7 +153,7 @@ assert_equal(
     [-1,  2, -3,  5,  4, -6, -8,  7],
     [-1, -2,  3,  4, -5,  8, -6,  7],
   ],
-  "Should solve the van der Waerden sample problem proposed by Knuth.",
+  "Knuth's sample van der Waerden problem",
 );
 
 
@@ -274,19 +287,18 @@ assert_equal(
 // there's at least one queen in each row, and at most one queen in each column
 // and diagonal.
 
-function pretty(solution) {
+function to_chess_notation(solution) {
   const n = solution.length;
-  const k = Math.sqrt(n);
-  if(!Number.isInteger(k)) { throw new Error("Invalid board size"); }
+  const k = Math.floor(Math.sqrt(n));
+  if(k < 1 || k >= 27 || n !== k * k) { throw new Error("Invalid board size"); }
 
   const squares = [];
   for(let i = 0; i < n; i++) {
     const l = solution[i];
-    if(l < 0) { continue; }
+    if(l < 1) { continue; }
 
-    const v = Math.abs(l) - 1;
-    const x = (v % k) + 1;
-    const y = Math.floor(v / k) + 1;
+    const x = ((l - 1) % k) + 1;
+    const y = Math.floor((l - 1) / k) + 1;
     squares.push(String.fromCharCode(96 + x) + y);
   }
 
@@ -317,7 +329,7 @@ assert_equal(
     ...at_most(1, [2, 7, 12]),
     ...at_most(1, [3, 8]),
     ...at_most(1, [4]),
-  ]).map(pretty).sort(),
+  ]).map(to_chess_notation).sort(),
   ["a2 b4 c1 d3", "a3 b1 c4 d2"],
   "Should solve the 4-Queens puzzle.",
 );
@@ -370,7 +382,7 @@ assert_equal(
     ...at_most(1, [6, 15, 24]),
     ...at_most(1, [7, 16]),
     ...at_most(1, [8]),
-  ]).map(pretty).sort(),
+  ]).map(to_chess_notation).sort(),
   [
     "a1 b5 c8 d6 e3 f7 g2 h4", "a1 b6 c8 d3 e7 f4 g2 h5",
     "a1 b7 c4 d6 e8 f2 g5 h3", "a1 b7 c5 d8 e2 f4 g6 h3",
