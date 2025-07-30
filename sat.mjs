@@ -1,18 +1,4 @@
-// ASSERTIONS
-//
-// Normally, one would test their software using an external toolkit. For a toy
-// like this, though, I'll just be inlining the tests as I go. For that, I'll
-// need to be able to make simple assertions.
-
-function assert(test, message) {
-  if(!test) { throw new Error(message); }
-}
-
-function assert_equal(actual, expected, message) {
-  // HACK: JSON.stringify() is, in fact, a horrible way to test deep equality,
-  // but it's good enough for government work [shrug emoji].
-  assert(JSON.stringify(actual) === JSON.stringify(expected), message);
-}
+import {deepStrictEqual as assert_equal} from "node:assert";
 
 
 // BOOLEAN SATISFIABILITY PROBLEM
@@ -91,43 +77,45 @@ function simplify_formula(formula, literal) {
   return f;
 }
 
-// Prepend literal to every solution in a list of solutions. This modifies the
-// input arrays, which is a little evil, but it's safe in this case since the
-// input arrays (in solve()) are never used elsewhere.
-function prepend(solutions, literal) {
-  const n = solutions.length;
-  for(let i = 0; i < n; i++) { solutions[i].unshift(literal); }
-
-  return solutions;
-}
-
-// Return EVERY POSSIBLE solution to the given CNF formula. (An empty array
-// means there are no solutions and the formula is UNSAT.)
-// NB: Be careful! There may be many!
-function solve(formula) {
+// Return a generator which enumerates solutions to the given CNF formula.
+function* solve(formula) {
   // A null formula is one in which a contradiction has been found. (See
   // simplify_formula().) That's UNSAT, so return no solutions.
-  if(formula === null) { return []; }
+  if(formula === null) { return; }
 
   // A formula with no clauses has a trivial solution.
-  if(formula.length === 0) { return [[]]; }
+  if(formula.length === 0) { yield []; return; }
 
   // Pick an arbitrary variable from the formula, and (recursively) try to
   // solve the formulas that result from assuming it to be either true or
   // false. If we find any solutions, simply prepend our assumptions to them.
   const l = formula[0][0];
-  return prepend(solve(simplify_formula(formula, l)), l).
-    concat(prepend(solve(simplify_formula(formula, -l)), -l));
+  for(const c of solve(simplify_formula(formula,  l))) { yield [ l, ...c]; }
+  for(const c of solve(simplify_formula(formula, -l))) { yield [-l, ...c]; }
+}
+
+// Return an array containing EVERY POSSIBLE solution to the given CNF formula.
+// (An empty array means there are no solutions and the formula is UNSAT.)
+// NB: Be careful! There may be many!
+function solve_all(formula) {
+  return Array.from(solve(formula));
+}
+
+// Return ANY solution to the given CNF formula, or null if the formula is
+// UNSAT.
+function solve_any(formula) {
+  for(const c of solve(formula)) { return c; }
+  return null;
 }
 
 assert_equal(
-  solve([[1, 2], [-1, 3], [-3, 4], [1]]),
+  solve_all([[1, 2], [-1, 3], [-3, 4], [1]]),
   [[1, 3, 4]],
   "Should solve a simple 2SAT formula.",
 );
 
 assert_equal(
-  solve([
+  solve_all([
     [1, 2, -3], [2, 3, -4], [1, 3, 4], [-1, 2, 4],
     [-1, -2, 3], [-2, -3, 4], [-3, -4, -1], [1, -2, -4],
   ]),
@@ -136,7 +124,7 @@ assert_equal(
 );
 
 assert_equal(
-  solve([
+  solve_all([
     [1, 2, 3], [-1, -2, -3], [1, 3, 5], [-1, -3, -5],
     [1, 4, 7], [-1, -4, -7], [2, 3, 4], [-2, -3, -4],
     [2, 4, 6], [-2, -4, -6], [2, 5, 8], [-2, -5, -8],
@@ -306,7 +294,7 @@ function pretty(solution) {
 }
 
 assert_equal(
-  solve([
+  solve_all([
     ...at_least(1, [1, 2, 3, 4]),
     ...at_least(1, [5, 6, 7, 8]),
     ...at_least(1, [9, 10, 11, 12]),
@@ -335,7 +323,7 @@ assert_equal(
 );
 
 assert_equal(
-  solve([
+  solve_all([
     ...at_least(1, [1, 2, 3, 4, 5, 6, 7, 8]),
     ...at_least(1, [9, 10, 11, 12, 13, 14, 15, 16]),
     ...at_least(1, [17, 18, 19, 20, 21, 22, 23, 24]),
@@ -433,249 +421,3 @@ assert_equal(
   ],
   "Should solve the 8-Queens puzzle.",
 );
-
-// ADVANCED DUNGEONS AND DIAGRAMS
-//
-// Advanced Dungeons and Diagrams is a cute little pen-and-paper puzzle game
-// made by Zach Barth[1]. I really enjoyed it and solved all the puzzles right
-// away. When his company, Zachtronics, published a digital version[2], I
-// really enjoyed it and solved all the puzzles right away, too. Well, almost.
-// See, after you beat all of the hand-designed puzzles, the game unlocks an
-// "infinite dungeon" that randomly generates new puzzles for you. I wanted
-// to beat all of the puzzles! But how could I possibly beat an infinite number
-// of them?
-//
-// The answer, of course, is to write a program to solve them all for me. While
-// I could write a bespoke solver JUST for AD&D puzzles, I've always wanted to
-// dig into SAT solving, and this was a good opportunity to do so. So now I've
-// learned a bunch about SAT and also have a tool handy in case I ever want to
-// solve other logic puzzles, too.
-//
-// [1]: https://trashworldnews.com/files/advanced_dungeons_and_diagrams.pdf
-// [2]: https://www.zachtronics.com/last-call-bbs/
-
-// Enumerate N numbers starting at start and incrementing by step
-function enumerate(n, start, step) {
-  const ns = new Array(n);
-  for(let i = 0; i < n; i++, start += step) { ns[i] = start; }
-
-  return ns;
-}
-
-function dungeons_and_diagrams(diagram) {
-  const match = /^ *(.+)\n+ *([0-8]{8})\n *([0-8])([\.MT]{8})\n *([0-8])([\.MT]{8})\n *([0-8])([\.MT]{8})\n *([0-8])([\.MT]{8})\n *([0-8])([\.MT]{8})\n *([0-8])([\.MT]{8})\n *([0-8])([\.MT]{8})\n *([0-8])([\.MT]{8})$/gm.exec(diagram);
-  if(match === null) { throw new RangeError("Input wasn't in diagram format"); }
-
-  const name = match[1];
-  const cols = match[2];
-  const rows = [
-    match[3], match[5], match[7], match[9],
-    match[11], match[13], match[15], match[17],
-  ];
-  const monsters = [];
-  const treasures = [];
-  for(let y = 0; y < 8; y++) {
-    const row = match[4 + y * 2];
-    for(let x = 0; x < 8; x++) {
-      switch(row.charCodeAt(x)) {
-        case 77: monsters.push([x, y]); break;
-        case 84: treasures.push([x, y]); break;
-      }
-    }
-  }
-
-  // FIXME: Support treasures, too.
-  if(treasures.length !== 0) {
-    console.warn("Didn't attempt to solve %s", name);
-    return;
-  }
-
-  // Convert to CNF.
-  const formula = [];
-
-  // There are no walls where there are monsters or treasures.
-  for(const [x, y] of [...monsters, ...treasures]) {
-    formula.push([-(y * 8 + x + 1)]);
-  }
-
-  // There should be exactly N filled squares per column and row.
-  for(let i = 0; i < 8; i++) {
-    formula.push(...exactly(+cols[i], enumerate(8, i + 1, 8)));
-    formula.push(...exactly(+rows[i], enumerate(8, i * 8 + 1, 1)));
-  }
-
-  // There should be at least 1 wall in every 2x2 square.
-  // FIXME: Unless we're in a treasure room!
-  for(let y = 0; y < 7; y++) {
-    for(let x = 0; x < 7; x++) {
-      formula.push(...at_least(1, [y * 8 + x + 1, y * 8 + x + 2, y * 8 + x + 9, y * 8 + x + 10]));
-    }
-  }
-
-  // Each monster should be in a dead end.
-  for(const [x, y] of monsters) {
-    const set = [];
-    if(x >= 1) { set.push(y * 8 + x); }
-    if(x <= 6) { set.push(y * 8 + x + 2); }
-    if(y >= 1) { set.push(y * 8 + x - 7); }
-    if(y <= 6) { set.push(y * 8 + x + 9); }
-    formula.push(...exactly(set.length - 1, set));
-  }
-
-  // FIXME: There should be no dead ends EXCEPT for monsters.
-
-  const solutions = solve(formula);
-  for(const solution of solutions) {
-    const grid = new Array(64).fill(".");
-    for(const literal of solution) {
-      if(literal < 0) { continue; }
-      grid[literal - 1] = "#";
-    }
-    for(const [x, y] of monsters) {
-      grid[y * 8 + x] = "M";
-    }
-    for(const [x, y] of treasures) {
-      grid[y * 8 + x] = "T";
-    }
-
-    console.log(
-      "%s\n\n   %s\n  %s%s\n  %s%s\n  %s%s\n  %s%s\n  %s%s\n  %s%s\n  %s%s\n  %s%s\n",
-      name,
-      cols,
-      rows[0], grid.slice( 0,  8).join(""),
-      rows[1], grid.slice( 8, 16).join(""),
-      rows[2], grid.slice(16, 24).join(""),
-      rows[3], grid.slice(24, 32).join(""),
-      rows[4], grid.slice(32, 40).join(""),
-      rows[5], grid.slice(40, 48).join(""),
-      rows[6], grid.slice(48, 56).join(""),
-      rows[7], grid.slice(56, 64).join(""),
-    );
-  }
-}
-
-dungeons_and_diagrams(`
-  Tenaxxus's Gullet
-
-   44262347
-  7.....M..
-  3........
-  4.T......
-  1........
-  7........
-  1M.......
-  6........
-  3..M....M
-`);
-
-dungeons_and_diagrams(`
-  The Twin Cities of the Dead
-
-   13153435
-  5........
-  2..T.T...
-  2........
-  3........
-  6M.......
-  0........
-  6........
-  1....M.M.
-`);
-
-dungeons_and_diagrams(`
-  The Gardens of Hell
-
-   14363144
-  6M......M
-  0........
-  4........
-  1.......M
-  5M.......
-  3........
-  3....T...
-  4M.......
-`);
-
-dungeons_and_diagrams(`
-  The House Penumbral
-
-   04073432
-  6M.M.....
-  2.......T
-  3........
-  1........
-  5........
-  1........
-  4........
-  1......M.
-`);
-
-dungeons_and_diagrams(`
-  The Maze of the Minotaur
-
-   72613261
-  0M.......
-  7........
-  3.M.T....
-  3........
-  3........
-  5........
-  2........
-  5........
-`);
-
-dungeons_and_diagrams(`
-  The Halls of the Golemancer
-
-   53246415
-  6.....M..
-  3.......M
-  3..T..M..
-  3.......M
-  5.....M..
-  3.......M
-  4........
-  3........
-`);
-
-dungeons_and_diagrams(`
-  The Tomb of the Broken God
-
-   13326241
-  1.T..M...
-  4........
-  1........
-  6........
-  2.......M
-  2........
-  5........
-  1.....M..
-`);
-
-dungeons_and_diagrams(`
-  The Hive of Great Sorrow
-
-   36054063
-  6..M..M..
-  2M......M
-  4........
-  3....M...
-  2........
-  4........
-  2M......M
-  4........
-`);
-
-dungeons_and_diagrams(`
-  The Lair of the Elemental King
-
-   52125423
-  4.......M
-  1........
-  4..M.....
-  2........
-  6........
-  2........
-  3...T....
-  2........
-`);
