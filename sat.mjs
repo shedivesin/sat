@@ -571,6 +571,13 @@ function to_sudoku(solution) {
   return chars.join("");
 }
 
+// FIXME: This doesn't complete because my shitty toy SAT solver is garbage.
+// MiniSAT, which is a REAL solver, takes 1.3s to find a solution. If I wrote
+// a REAL solver in JS, it'd probably be an order of magnitude slower, and
+// that's at best. So my crappy toy solver isn't even in the same league and
+// would probably take hours to find a solution.
+//
+// Welp, I guess that means it's time to write a real solver.
 console.log(
   to_sudoku(
     solve_any([
