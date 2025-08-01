@@ -77,74 +77,59 @@ function simplify_formula(formula, literal) {
   return f;
 }
 
-// Return a generator which enumerates solutions to the given CNF formula.
-function* solve(formula) {
+// Prepend literal to every solution in a list of solutions. This modifies the
+// input arrays, which is a little evil, but it's safe in this case since the
+// input arrays (in solve()) are never used elsewhere.
+function prepend(solutions, literal) {
+  const n = solutions.length;
+  for(let i = 0; i < n; i++) { solutions[i].unshift(literal); }
+
+  return solutions;
+}
+
+// Return EVERY POSSIBLE solution to the given CNF formula. (An empty array
+// means there are no solutions and the formula is UNSAT.)
+// NB: Be careful! There may be many!
+function solve(formula) {
   // A null formula is one in which a contradiction has been found. (See
   // simplify_formula().) That's UNSAT, so return no solutions.
-  if(formula === null) { return; }
+  if(formula === null) { return []; }
 
   // A formula with no clauses has a trivial solution.
-  if(formula.length === 0) { yield []; return; }
+  if(formula.length === 0) { return [[]]; }
 
   // Pick an arbitrary variable from the formula, and (recursively) try to
   // solve the formulas that result from assuming it to be either true or
   // false. If we find any solutions, simply prepend our assumptions to them.
   const l = formula[0][0];
-  for(const c of solve(simplify_formula(formula,  l))) { c.unshift( l); yield c; }
-  for(const c of solve(simplify_formula(formula, -l))) { c.unshift(-l); yield c; }
+  return prepend(solve(simplify_formula(formula, l)), l).
+    concat(prepend(solve(simplify_formula(formula, -l)), -l));
 }
 
-// Return an array containing EVERY POSSIBLE solution to the given CNF formula.
-// (An empty array means there are no solutions and the formula is UNSAT.)
-// NB: Be careful! There may be many!
-function solve_all(formula) {
-  return Array.from(solve(formula));
-}
-
-// Return ANY solution to the given CNF formula, or null if the formula is
-// UNSAT.
-function solve_any(formula) {
-  for(const c of solve(formula)) { return c; }
-  return null;
-}
-
-function assert_solve(formula, solutions, description) {
-  assert_equal(
-    solve_all(formula),
-    solutions,
-    `Should give all solutions to ${description}.`,
-  );
-  assert_equal(
-    solve_any(formula),
-    solutions[0] ?? null,
-    `Should give any solution to ${description}.`,
-  );
-}
-
-assert_solve(
-  [[1, 2], [-1, 3], [-3, 4], [1]],
+assert_equal(
+  solve([[1, 2], [-1, 3], [-3, 4], [1]]),
   [[1, 3, 4]],
   "a simple 2SAT formula",
 );
 
-assert_solve(
-  [
+assert_equal(
+  solve([
     [1, 2, -3], [2, 3, -4], [1, 3, 4], [-1, 2, 4],
     [-1, -2, 3], [-2, -3, 4], [-3, -4, -1], [1, -2, -4],
-  ],
+  ]),
   [],
   "the \"shortest interesting formula in 3CNF\"",
 );
 
-assert_solve(
-  [
+assert_equal(
+  solve([
     [1, 2, 3], [-1, -2, -3], [1, 3, 5], [-1, -3, -5],
     [1, 4, 7], [-1, -4, -7], [2, 3, 4], [-2, -3, -4],
     [2, 4, 6], [-2, -4, -6], [2, 5, 8], [-2, -5, -8],
     [3, 4, 5], [-3, -4, -5], [3, 5, 7], [-3, -5, -7],
     [4, 5, 6], [-4, -5, -6], [4, 6, 8], [-4, -6, -8],
     [5, 6, 7], [-5, -6, -7], [6, 7, 8], [-6, -7, -8],
-  ],
+  ]),
   [
     [ 1, -2, -3,  4, -7,  5, -6,  8],
     [ 1, -2,  3, -5, -4,  6,  8, -7],
@@ -286,7 +271,6 @@ assert_equal(
 // queen on this square?" for each square of the board, and then make sure that
 // there's at least one queen in each row, and at most one queen in each column
 // and diagonal.
-
 function to_chess_notation(solution) {
   const n = solution.length;
   const k = Math.floor(Math.sqrt(n));
@@ -307,8 +291,10 @@ function to_chess_notation(solution) {
   return squares.sort().join(" ");
 }
 
+console.time("N-Queens");
+
 assert_equal(
-  solve_all([
+  solve([
     ...at_least(1, [1, 2, 3, 4]),
     ...at_least(1, [5, 6, 7, 8]),
     ...at_least(1, [9, 10, 11, 12]),
@@ -337,7 +323,7 @@ assert_equal(
 );
 
 assert_equal(
-  solve_all([
+  solve([
     ...at_least(1, [1, 2, 3, 4, 5, 6, 7, 8]),
     ...at_least(1, [9, 10, 11, 12, 13, 14, 15, 16]),
     ...at_least(1, [17, 18, 19, 20, 21, 22, 23, 24]),
@@ -435,6 +421,8 @@ assert_equal(
   ],
   "Should solve the 8-Queens puzzle.",
 );
+
+console.timeEnd("N-Queens");
 
 
 // SUDOKU
@@ -578,9 +566,13 @@ function to_sudoku(solution) {
 // would probably take hours to find a solution.
 //
 // Welp, I guess that means it's time to write a real solver.
+// This puzzle is taken from Gordon Royle's (now defunct) minimum Sudoku
+// collection[1]. With 17 clues, it's among the hardest Sudoku puzzles.
+//
+// [1]: http://school.maths.uwa.edu.au/~gordon/sudokumin.php
 console.log(
   to_sudoku(
-    solve_any([
+    solve([
       [sudoku_cell(8, 1, 1)],
       [sudoku_cell(1, 2, 4)],
       [sudoku_cell(2, 3, 2)],
