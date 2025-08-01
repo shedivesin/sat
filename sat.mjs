@@ -90,8 +90,8 @@ function* solve(formula) {
   // solve the formulas that result from assuming it to be either true or
   // false. If we find any solutions, simply prepend our assumptions to them.
   const l = formula[0][0];
-  for(const c of solve(simplify_formula(formula,  l))) { yield [ l, ...c]; }
-  for(const c of solve(simplify_formula(formula, -l))) { yield [-l, ...c]; }
+  for(const c of solve(simplify_formula(formula,  l))) { c.unshift( l); yield c; }
+  for(const c of solve(simplify_formula(formula, -l))) { c.unshift(-l); yield c; }
 }
 
 // Return an array containing EVERY POSSIBLE solution to the given CNF formula.
@@ -290,16 +290,18 @@ assert_equal(
 function to_chess_notation(solution) {
   const n = solution.length;
   const k = Math.floor(Math.sqrt(n));
-  if(k < 1 || k >= 27 || n !== k * k) { throw new Error("Invalid board size"); }
+  if(!(k >= 1 && k < 27 && n === k * k)) { throw new Error("Invalid board size"); }
 
   const squares = [];
   for(let i = 0; i < n; i++) {
     const l = solution[i];
-    if(l < 1) { continue; }
+    if(!(l >= 1)) { continue; }
 
-    const x = ((l - 1) % k) + 1;
-    const y = Math.floor((l - 1) / k) + 1;
-    squares.push(String.fromCharCode(96 + x) + y);
+    const x = ((l - 1) % k);
+    const y = Math.floor((l - 1) / k);
+    if(!(x >= 0 && x < k && y >= 0 && y < k)) { continue; }
+
+    squares.push(String.fromCharCode(97 + x) + (y + 1));
   }
 
   return squares.sort().join(" ");
@@ -432,4 +434,164 @@ assert_equal(
     "a8 b3 c1 d6 e2 f5 g7 h4", "a8 b4 c1 d3 e6 f2 g7 h5",
   ],
   "Should solve the 8-Queens puzzle.",
+);
+
+
+// SUDOKU
+
+// NB: 1≤x≤9, 1≤y≤9, 1≤c≤9.
+function sudoku_cell(x, y, c) {
+  return y * 81 + x * 9 + c - 90;
+}
+
+const sudoku_constraints = [];
+
+// Each square must contain at least one color.
+for(let y = 1; y < 10; y++) {
+  for(let x = 1; x < 10; x++) {
+    sudoku_constraints.push(...at_least(1, [
+      sudoku_cell(x, y, 1),
+      sudoku_cell(x, y, 2),
+      sudoku_cell(x, y, 3),
+      sudoku_cell(x, y, 4),
+      sudoku_cell(x, y, 5),
+      sudoku_cell(x, y, 6),
+      sudoku_cell(x, y, 7),
+      sudoku_cell(x, y, 8),
+      sudoku_cell(x, y, 9),
+    ]));
+  }
+}
+
+// Each square must contain at most one color.
+for(let y = 1; y < 10; y++) {
+  for(let x = 1; x < 10; x++) {
+    sudoku_constraints.push(...at_most(1, [
+      sudoku_cell(x, y, 1),
+      sudoku_cell(x, y, 2),
+      sudoku_cell(x, y, 3),
+      sudoku_cell(x, y, 4),
+      sudoku_cell(x, y, 5),
+      sudoku_cell(x, y, 6),
+      sudoku_cell(x, y, 7),
+      sudoku_cell(x, y, 8),
+      sudoku_cell(x, y, 9),
+    ]));
+  }
+}
+
+// Each row must contain each color.
+for(let y = 1; y < 10; y++) {
+  for(let c = 1; c < 10; c++) {
+    sudoku_constraints.push(...at_least(1, [
+      sudoku_cell(1, y, c),
+      sudoku_cell(2, y, c),
+      sudoku_cell(3, y, c),
+      sudoku_cell(4, y, c),
+      sudoku_cell(5, y, c),
+      sudoku_cell(6, y, c),
+      sudoku_cell(7, y, c),
+      sudoku_cell(8, y, c),
+      sudoku_cell(9, y, c),
+    ]));
+  }
+}
+
+// Each column must contain each color.
+for(let x = 1; x < 10; x++) {
+  for(let c = 1; c < 10; c++) {
+    sudoku_constraints.push(...at_least(1, [
+      sudoku_cell(x, 1, c),
+      sudoku_cell(x, 2, c),
+      sudoku_cell(x, 3, c),
+      sudoku_cell(x, 4, c),
+      sudoku_cell(x, 5, c),
+      sudoku_cell(x, 6, c),
+      sudoku_cell(x, 7, c),
+      sudoku_cell(x, 8, c),
+      sudoku_cell(x, 9, c),
+    ]));
+  }
+}
+
+// Each 3x3 block must contain each color.
+for(let y = 1; y < 10; y += 3) {
+  for(let x = 1; x < 10; x += 3) {
+    for(let c = 1; c < 10; c++) {
+      sudoku_constraints.push(...at_least(1, [
+        sudoku_cell(x + 0, y + 0, c),
+        sudoku_cell(x + 1, y + 0, c),
+        sudoku_cell(x + 2, y + 0, c),
+        sudoku_cell(x + 0, y + 1, c),
+        sudoku_cell(x + 1, y + 1, c),
+        sudoku_cell(x + 2, y + 1, c),
+        sudoku_cell(x + 0, y + 2, c),
+        sudoku_cell(x + 1, y + 2, c),
+        sudoku_cell(x + 2, y + 2, c),
+      ]));
+    }
+  }
+}
+
+function to_sudoku(solution) {
+  const chars = [
+    " ", " ", " ", "|", " ", " ", " ", "|", " ", " ", " ", "\n",
+    " ", " ", " ", "|", " ", " ", " ", "|", " ", " ", " ", "\n",
+    " ", " ", " ", "|", " ", " ", " ", "|", " ", " ", " ", "\n",
+    "-", "-", "-", "+", "-", "-", "-", "+", "-", "-", "-", "\n",
+    " ", " ", " ", "|", " ", " ", " ", "|", " ", " ", " ", "\n",
+    " ", " ", " ", "|", " ", " ", " ", "|", " ", " ", " ", "\n",
+    " ", " ", " ", "|", " ", " ", " ", "|", " ", " ", " ", "\n",
+    "-", "-", "-", "+", "-", "-", "-", "+", "-", "-", "-", "\n",
+    " ", " ", " ", "|", " ", " ", " ", "|", " ", " ", " ", "\n",
+    " ", " ", " ", "|", " ", " ", " ", "|", " ", " ", " ", "\n",
+    " ", " ", " ", "|", " ", " ", " ", "|", " ", " ", " ", "\n",
+  ];
+
+  for(let y of solution) {
+    if(!(y >= 1)) { continue; }
+
+    y -= 1;
+
+    const c = y % 9;
+    y = Math.floor((y - c) / 9);
+
+    const x = y % 9;
+    y = Math.floor((y - x) / 9);
+
+    let i = y * 12 + x;
+    if(x >= 3) { i +=  1; }
+    if(x >= 6) { i +=  1; }
+    if(y >= 3) { i += 12; }
+    if(y >= 6) { i += 12; }
+
+    chars[i] = c + 1;
+  }
+
+  return chars.join("");
+}
+
+console.log(
+  to_sudoku(
+    solve_any([
+      [sudoku_cell(8, 1, 1)],
+      [sudoku_cell(1, 2, 4)],
+      [sudoku_cell(2, 3, 2)],
+      [sudoku_cell(5, 4, 5)],
+      [sudoku_cell(7, 4, 4)],
+      [sudoku_cell(9, 4, 7)],
+      [sudoku_cell(3, 5, 8)],
+      [sudoku_cell(7, 5, 3)],
+      [sudoku_cell(3, 6, 1)],
+      [sudoku_cell(5, 6, 9)],
+      [sudoku_cell(1, 7, 3)],
+      [sudoku_cell(4, 7, 4)],
+      [sudoku_cell(7, 7, 2)],
+      [sudoku_cell(2, 8, 5)],
+      [sudoku_cell(4, 8, 1)],
+      [sudoku_cell(4, 9, 8)],
+      [sudoku_cell(6, 9, 6)],
+      ...sudoku_constraints,
+    ]),
+  ),
 );
