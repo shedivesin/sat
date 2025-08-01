@@ -80,10 +80,8 @@ function simplify_formula(formula, literal) {
 // Prepend literal to every solution in a list of solutions. This modifies the
 // input arrays, which is a little evil, but it's safe in this case since the
 // input arrays (in solve()) are never used elsewhere.
-function prepend(solutions, literal) {
-  const n = solutions.length;
-  for(let i = 0; i < n; i++) { solutions[i].unshift(literal); }
-
+function append(solutions, literal) {
+  for(const solution of solutions) { solution.push(literal); }
   return solutions;
 }
 
@@ -102,41 +100,50 @@ function solve(formula) {
   // solve the formulas that result from assuming it to be either true or
   // false. If we find any solutions, simply prepend our assumptions to them.
   const l = formula[0][0];
-  return prepend(solve(simplify_formula(formula, l)), l).
-    concat(prepend(solve(simplify_formula(formula, -l)), -l));
+  return append(solve(simplify_formula(formula, l)), l).
+    concat(append(solve(simplify_formula(formula, -l)), -l));
+}
+
+function by_variable(a, b) {
+  return Math.abs(a) - Math.abs(b);
+}
+
+function sort_by_variable(solutions) {
+  for(const solution of solutions) { solution.sort(by_variable); }
+  return solutions;
 }
 
 assert_equal(
-  solve([[1, 2], [-1, 3], [-3, 4], [1]]),
+  sort_by_variable(solve([[1, 2], [-1, 3], [-3, 4], [1]])),
   [[1, 3, 4]],
   "a simple 2SAT formula",
 );
 
 assert_equal(
-  solve([
+  sort_by_variable(solve([
     [1, 2, -3], [2, 3, -4], [1, 3, 4], [-1, 2, 4],
     [-1, -2, 3], [-2, -3, 4], [-3, -4, -1], [1, -2, -4],
-  ]),
+  ])),
   [],
   "the \"shortest interesting formula in 3CNF\"",
 );
 
 assert_equal(
-  solve([
+  sort_by_variable(solve([
     [1, 2, 3], [-1, -2, -3], [1, 3, 5], [-1, -3, -5],
     [1, 4, 7], [-1, -4, -7], [2, 3, 4], [-2, -3, -4],
     [2, 4, 6], [-2, -4, -6], [2, 5, 8], [-2, -5, -8],
     [3, 4, 5], [-3, -4, -5], [3, 5, 7], [-3, -5, -7],
     [4, 5, 6], [-4, -5, -6], [4, 6, 8], [-4, -6, -8],
     [5, 6, 7], [-5, -6, -7], [6, 7, 8], [-6, -7, -8],
-  ]),
+  ])),
   [
-    [ 1, -2, -3,  4, -7,  5, -6,  8],
-    [ 1, -2,  3, -5, -4,  6,  8, -7],
-    [ 1,  2, -3, -4,  5, -8,  6, -7],
-    [-1,  2,  3, -4,  7, -5,  6, -8],
-    [-1,  2, -3,  5,  4, -6, -8,  7],
-    [-1, -2,  3,  4, -5,  8, -6,  7],
+    [ 1, -2, -3,  4,  5, -6, -7,  8],
+    [ 1, -2,  3, -4, -5,  6, -7,  8],
+    [ 1,  2, -3, -4,  5,  6, -7, -8],
+    [-1,  2,  3, -4, -5,  6,  7, -8],
+    [-1,  2, -3,  4,  5, -6,  7, -8],
+    [-1, -2,  3,  4, -5, -6,  7,  8],
   ],
   "Knuth's sample van der Waerden problem",
 );
@@ -266,11 +273,42 @@ assert_equal(
 // N-QUEENS PUZZLE
 //
 // Before moving onto harder and more interesting problems, let's exercise the
-// SAT solver and the constraint definitions together by solving the N-queens
-// puzzle. The definition is simple: assign a single variable to "is there a
-// queen on this square?" for each square of the board, and then make sure that
-// there's at least one queen in each row, and at most one queen in each column
-// and diagonal.
+// SAT solver by solving the N-queens puzzle. The definition is simple: assign
+// a single variable to "is there a queen on this square?" for each square of
+// the board, and then make sure that there's at least one queen in each row,
+// and at most one queen in each column and diagonal.
+function n_queens(n) {
+  const formula = [];
+
+  // There should be a queen in each row.
+  for(let y = 0; y < n; y++) {
+    const row = new Array(n);
+    for(let x = 0; x < n; x++) {
+      row[x] = y * n + x + 1;
+    }
+
+    formula.push(row);
+  }
+
+  // Each pair of squares in the same column or diagonal should have at least
+  // one empty square.
+  for(let x = 0; x < n; x++) {
+    for(let y2 = 1; y2 < n; y2++) {
+      for(let y1 = 0; y1 < y2; y1++) {
+        formula.push([-(y1 * n + x + 1), -(y2 * n + x + 1)]);
+
+        const x1 = x + y1 - y2;
+        if(x1 >= 0) { formula.push([-(y1 * n + x + 1), -(y2 * n + x1 + 1)]); }
+
+        const x2 = x + y2 - y1;
+        if(x2 <  n) { formula.push([-(y1 * n + x + 1), -(y2 * n + x2 + 1)]); }
+      }
+    }
+  }
+
+  return formula;
+}
+
 function to_chess_notation(solution) {
   const n = solution.length;
   const k = Math.floor(Math.sqrt(n));
@@ -291,86 +329,17 @@ function to_chess_notation(solution) {
   return squares.sort().join(" ");
 }
 
-console.time("N-Queens");
-
+console.time("4-Queens");
 assert_equal(
-  solve([
-    ...at_least(1, [1, 2, 3, 4]),
-    ...at_least(1, [5, 6, 7, 8]),
-    ...at_least(1, [9, 10, 11, 12]),
-    ...at_least(1, [13, 14, 15, 16]),
-    ...at_most(1, [1, 5, 9, 13]),
-    ...at_most(1, [2, 6, 10, 14]),
-    ...at_most(1, [3, 7, 11, 15]),
-    ...at_most(1, [4, 8, 12, 16]),
-    ...at_most(1, [1]),
-    ...at_most(1, [2, 5]),
-    ...at_most(1, [3, 6, 9]),
-    ...at_most(1, [4, 7, 10, 13]),
-    ...at_most(1, [8, 11, 14]),
-    ...at_most(1, [12, 15]),
-    ...at_most(1, [16]),
-    ...at_most(1, [13]),
-    ...at_most(1, [9, 14]),
-    ...at_most(1, [5, 10, 15]),
-    ...at_most(1, [1, 6, 11, 16]),
-    ...at_most(1, [2, 7, 12]),
-    ...at_most(1, [3, 8]),
-    ...at_most(1, [4]),
-  ]).map(to_chess_notation).sort(),
+  solve(n_queens(4)).map(to_chess_notation).sort(),
   ["a2 b4 c1 d3", "a3 b1 c4 d2"],
   "Should solve the 4-Queens puzzle.",
 );
+console.timeEnd("4-Queens");
 
+console.time("8-Queens");
 assert_equal(
-  solve([
-    ...at_least(1, [1, 2, 3, 4, 5, 6, 7, 8]),
-    ...at_least(1, [9, 10, 11, 12, 13, 14, 15, 16]),
-    ...at_least(1, [17, 18, 19, 20, 21, 22, 23, 24]),
-    ...at_least(1, [25, 26, 27, 28, 29, 30, 31, 32]),
-    ...at_least(1, [33, 34, 35, 36, 37, 38, 39, 40]),
-    ...at_least(1, [41, 42, 43, 44, 45, 46, 47, 48]),
-    ...at_least(1, [49, 50, 51, 52, 53, 54, 55, 56]),
-    ...at_least(1, [57, 58, 59, 60, 61, 62, 63, 64]),
-    ...at_most(1, [1, 9, 17, 25, 33, 41, 49, 57]),
-    ...at_most(1, [2, 10, 18, 26, 34, 42, 50, 58]),
-    ...at_most(1, [3, 11, 19, 27, 35, 43, 51, 59]),
-    ...at_most(1, [4, 12, 20, 28, 36, 44, 52, 60]),
-    ...at_most(1, [5, 13, 21, 29, 37, 45, 53, 61]),
-    ...at_most(1, [6, 14, 22, 30, 38, 46, 54, 62]),
-    ...at_most(1, [7, 15, 23, 31, 39, 47, 55, 63]),
-    ...at_most(1, [8, 16, 24, 32, 40, 48, 56, 64]),
-    ...at_most(1, [1]),
-    ...at_most(1, [2, 9]),
-    ...at_most(1, [3, 10, 17]),
-    ...at_most(1, [4, 11, 18, 25]),
-    ...at_most(1, [5, 12, 19, 26, 33]),
-    ...at_most(1, [6, 13, 20, 27, 34, 41]),
-    ...at_most(1, [7, 14, 21, 28, 35, 42, 49]),
-    ...at_most(1, [8, 15, 22, 29, 36, 43, 50, 57]),
-    ...at_most(1, [16, 23, 30, 37, 44, 51, 58]),
-    ...at_most(1, [24, 31, 38, 45, 52, 59]),
-    ...at_most(1, [32, 39, 46, 53, 60]),
-    ...at_most(1, [40, 47, 54, 61]),
-    ...at_most(1, [48, 55, 62]),
-    ...at_most(1, [56, 63]),
-    ...at_most(1, [64]),
-    ...at_most(1, [57]),
-    ...at_most(1, [49, 58]),
-    ...at_most(1, [41, 50, 59]),
-    ...at_most(1, [33, 42, 51, 60]),
-    ...at_most(1, [25, 34, 43, 52, 61]),
-    ...at_most(1, [17, 26, 35, 44, 53, 62]),
-    ...at_most(1, [9, 18, 27, 36, 45, 54, 63]),
-    ...at_most(1, [1, 10, 19, 28, 37, 46, 55, 64]),
-    ...at_most(1, [2, 11, 20, 29, 38, 47, 56]),
-    ...at_most(1, [3, 12, 21, 30, 39, 48]),
-    ...at_most(1, [4, 13, 22, 31, 40]),
-    ...at_most(1, [5, 14, 23, 32]),
-    ...at_most(1, [6, 15, 24]),
-    ...at_most(1, [7, 16]),
-    ...at_most(1, [8]),
-  ]).map(to_chess_notation).sort(),
+  solve(n_queens(8)).map(to_chess_notation).sort(),
   [
     "a1 b5 c8 d6 e3 f7 g2 h4", "a1 b6 c8 d3 e7 f4 g2 h5",
     "a1 b7 c4 d6 e8 f2 g5 h3", "a1 b7 c5 d8 e2 f4 g6 h3",
@@ -421,8 +390,15 @@ assert_equal(
   ],
   "Should solve the 8-Queens puzzle.",
 );
+console.timeEnd("8-Queens");
 
-console.timeEnd("N-Queens");
+console.time("10-Queens");
+assert_equal(
+  solve(n_queens(10)).length,
+  724,
+  "Should count the solutions to the 10-Queens puzzle.",
+);
+console.timeEnd("10-Queens");
 
 
 // SUDOKU
