@@ -96,6 +96,14 @@ function solve(formula) {
   // A formula with no clauses has a trivial solution.
   if(formula.length === 0) { return [[]]; }
 
+  // If there are any unit clauses, then favor them.
+  for(const clause of formula) {
+    if(clause.length === 1) {
+      const l = clause[0];
+      return append(solve(simplify_formula(formula, l)), l);
+    }
+  }
+
   // Pick an arbitrary variable from the formula, and (recursively) try to
   // solve the formulas that result from assuming it to be either true or
   // false. If we find any solutions, simply prepend our assumptions to them.
@@ -174,10 +182,10 @@ function n_queens(n) {
   for(let x = 0; x < n; x++) {
     for(let y2 = 1; y2 < n; y2++) {
       for(let y1 = 0; y1 < y2; y1++) {
-        formula.push([-(y1 * n + x + 1), -(y2 * n + x + 1)]);
-
         const x1 = x + y1 - y2;
         if(x1 >= 0) { formula.push([-(y1 * n + x + 1), -(y2 * n + x1 + 1)]); }
+
+        formula.push([-(y1 * n + x + 1), -(y2 * n + x + 1)]);
 
         const x2 = x + y2 - y1;
         if(x2 <  n) { formula.push([-(y1 * n + x + 1), -(y2 * n + x2 + 1)]); }
@@ -416,6 +424,7 @@ function to_sudoku(solution) {
 // collection[1]. With 17 clues, it's among the hardest Sudoku puzzles.
 //
 // [1]: http://school.maths.uwa.edu.au/~gordon/sudokumin.php
+console.time("Sudoku");
 console.log(
   to_sudoku(
     solve([
@@ -440,3 +449,4 @@ console.log(
     ]),
   ),
 );
+console.timeEnd("Sudoku");
