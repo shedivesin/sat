@@ -39,8 +39,6 @@ function solve(formula) {
   // do this even though zero is a valid index, since the 0th clause will never
   // link to itself). M contains an array of MOVEs for each variable, which
   // acts as a recursion stack and also contains the output.
-  // FIXME: We also need to know how many variables there are, since we need to
-  // keep a "move array" for each variable.
   const buffer = new ArrayBuffer((p + m + 1 + m + n) * 4);
   const L = new Uint32Array(buffer, 0, p);
   const S = new Uint32Array(buffer, p * 4, m + 1);
@@ -86,13 +84,15 @@ function solve(formula) {
   return solution;
 }
 
-solve([
-  [ 1,  2, -3],
-  [ 2,  3, -4],
-  [ 3,  4,  1],
-  [ 4, -1,  2],
-  [-1, -2,  3],
-  [-2, -3,  4],
-  [-3, -4, -1],
-  // [-4, 1, -2], // uncommenting this lane will make the problem UNSAT
-]);
+console.log(
+  solve([
+    [ 1,  2, -3],
+    [ 2,  3, -4],
+    [ 3,  4,  1],
+    [ 4, -1,  2],
+    [-1, -2,  3],
+    [-2, -3,  4],
+    [-3, -4, -1],
+    // [-4, 1, -2], // uncommenting this lane will make the problem UNSAT
+  ]),
+);
