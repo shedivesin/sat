@@ -149,127 +149,6 @@ assert_equal(
 );
 
 
-// CONSTRAINT DEFINITION
-//
-// It can be tricky to write CNF clauses by hand, so we define ourselves some
-// helper functions: at_most(), at_least(), and exactly(); these allow us to
-// say that we want some number of a set of variables to be true.
-//
-// There are lots of ways to encode these constraints (see [1]). Since this is
-// just a toy, we use the simplest (and least efficient) of these, called the
-// "binomial" encoding. It would be an interesting exercise to explore some of
-// the other encodings, though.
-//
-// [1]: https://www.it.uu.se/research/group/astra/ModRef10/papers/Alan%20M.%20Frisch%20and%20Paul%20A.%20Giannoros.%20SAT%20Encodings%20of%20the%20At-Most-k%20Constraint%20-%20ModRef%202010.pdf
-
-function combinations(k, array, sign) {
-  const n = array.length;
-  if(!(k >= 1 & k <= n)) { return []; }
-
-  const combinations = [];
-  const c = new Array(k);
-  c[0] = -1;
-
-  for(let i = 0; c[0] !== n - k; ) {
-    ++c[i];
-
-    while(++i !== k) { c[i] = c[i - 1] + 1; }
-
-    const combination = new Array(k);
-    for(let j = 0; j < k; j++) { combination[j] = array[c[j]] * sign; }
-    combinations.push(combination);
-
-    while(c[--i] === n + i - k) { }
-  }
-
-  return combinations;
-}
-
-function at_most(k, literals) {
-  return combinations(k + 1, literals, -1);
-}
-
-function at_least(k, literals) {
-  return combinations(literals.length - k + 1, literals, 1);
-}
-
-function exactly(k, literals) {
-  return at_most(k, literals).concat(at_least(k, literals));
-}
-
-assert_equal(
-  at_most(0, [1, 2, 3]),
-  [[-1], [-2], [-3]],
-  "at_most(0,Ls) should mean each L is false.",
-);
-
-assert_equal(
-  at_most(1, [1, 2, 3]),
-  [[-1, -2], [-1, -3], [-2, -3]],
-  "at_most(1,Ls) should mean no two Ls are simultaneously true.",
-);
-
-assert_equal(
-  at_most(2, [1, 2, 3]),
-  [[-1, -2, -3]],
-  "at_most(N-1,Ls) should mean some L is false.",
-);
-
-assert_equal(
-  at_most(3, [1, 2, 3]),
-  [],
-  "at_most(N,Ls) means nothing.",
-);
-
-assert_equal(
-  at_least(0, [1, 2, 3]),
-  [],
-  "at_least(0,Ls) means nothing.",
-);
-
-assert_equal(
-  at_least(1, [1, 2, 3]),
-  [[1, 2, 3]],
-  "at_least(1,Ls) should mean some L is true.",
-);
-
-assert_equal(
-  at_least(2, [1, 2, 3]),
-  [[1, 2], [1, 3], [2, 3]],
-  "at_least(N-1,Ls) should mean no two Ls are simultaneously false.",
-);
-
-assert_equal(
-  at_least(3, [1, 2, 3]),
-  [[1], [2], [3]],
-  "at_least(N,Ls) should mean each L is true.",
-);
-
-assert_equal(
-  exactly(0, [1, 2, 3]),
-  [[-1], [-2], [-3]],
-  "exactly(0,Ls) should mean each L is false.",
-);
-
-assert_equal(
-  exactly(1, [1, 2, 3]),
-  [[-1, -2], [-1, -3], [-2, -3], [1, 2, 3]],
-  "exactly(1,Ls) should mean some L is true but no two Ls are.",
-);
-
-assert_equal(
-  exactly(2, [1, 2, 3]),
-  [[-1, -2, -3], [1, 2], [1, 3], [2, 3]],
-  "exactly(N-1,Ls) should mean some L is false but no two Ls are.",
-);
-
-assert_equal(
-  exactly(3, [1, 2, 3]),
-  [[1], [2], [3]],
-  "exactly(N,Ls) should mean each L is true.",
-);
-
-
 // N-QUEENS PUZZLE
 //
 // Before moving onto harder and more interesting problems, let's exercise the
@@ -413,7 +292,7 @@ const sudoku_constraints = [];
 // Each square must contain at least one color.
 for(let y = 1; y < 10; y++) {
   for(let x = 1; x < 10; x++) {
-    sudoku_constraints.push(...at_least(1, [
+    sudoku_constraints.push([
       sudoku_cell(x, y, 1),
       sudoku_cell(x, y, 2),
       sudoku_cell(x, y, 3),
@@ -423,31 +302,25 @@ for(let y = 1; y < 10; y++) {
       sudoku_cell(x, y, 7),
       sudoku_cell(x, y, 8),
       sudoku_cell(x, y, 9),
-    ]));
+    ]);
   }
 }
 
 // Each square must contain at most one color.
 for(let y = 1; y < 10; y++) {
   for(let x = 1; x < 10; x++) {
-    sudoku_constraints.push(...at_most(1, [
-      sudoku_cell(x, y, 1),
-      sudoku_cell(x, y, 2),
-      sudoku_cell(x, y, 3),
-      sudoku_cell(x, y, 4),
-      sudoku_cell(x, y, 5),
-      sudoku_cell(x, y, 6),
-      sudoku_cell(x, y, 7),
-      sudoku_cell(x, y, 8),
-      sudoku_cell(x, y, 9),
-    ]));
+    for(let j = 2; j < 10; j++) {
+      for(let i = 1; i < j; i++) {
+        sudoku_constraints.push([-sudoku_cell(x, y, i), -sudoku_cell(x, y, j)]);
+      }
+    }
   }
 }
 
 // Each row must contain each color.
 for(let y = 1; y < 10; y++) {
   for(let c = 1; c < 10; c++) {
-    sudoku_constraints.push(...at_least(1, [
+    sudoku_constraints.push([
       sudoku_cell(1, y, c),
       sudoku_cell(2, y, c),
       sudoku_cell(3, y, c),
@@ -457,14 +330,14 @@ for(let y = 1; y < 10; y++) {
       sudoku_cell(7, y, c),
       sudoku_cell(8, y, c),
       sudoku_cell(9, y, c),
-    ]));
+    ]);
   }
 }
 
 // Each column must contain each color.
 for(let x = 1; x < 10; x++) {
   for(let c = 1; c < 10; c++) {
-    sudoku_constraints.push(...at_least(1, [
+    sudoku_constraints.push([
       sudoku_cell(x, 1, c),
       sudoku_cell(x, 2, c),
       sudoku_cell(x, 3, c),
@@ -474,7 +347,7 @@ for(let x = 1; x < 10; x++) {
       sudoku_cell(x, 7, c),
       sudoku_cell(x, 8, c),
       sudoku_cell(x, 9, c),
-    ]));
+    ]);
   }
 }
 
@@ -482,7 +355,7 @@ for(let x = 1; x < 10; x++) {
 for(let y = 1; y < 10; y += 3) {
   for(let x = 1; x < 10; x += 3) {
     for(let c = 1; c < 10; c++) {
-      sudoku_constraints.push(...at_least(1, [
+      sudoku_constraints.push([
         sudoku_cell(x + 0, y + 0, c),
         sudoku_cell(x + 1, y + 0, c),
         sudoku_cell(x + 2, y + 0, c),
@@ -492,7 +365,7 @@ for(let y = 1; y < 10; y += 3) {
         sudoku_cell(x + 0, y + 2, c),
         sudoku_cell(x + 1, y + 2, c),
         sudoku_cell(x + 2, y + 2, c),
-      ]));
+      ]);
     }
   }
 }
