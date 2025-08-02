@@ -289,9 +289,10 @@ function sudoku_cell(x, y, c) {
 
 const sudoku_constraints = [];
 
-// Each square must contain at least one color.
+// Each square must contain exactly one color.
 for(let y = 1; y < 10; y++) {
   for(let x = 1; x < 10; x++) {
+    // At least one color.
     sudoku_constraints.push([
       sudoku_cell(x, y, 1),
       sudoku_cell(x, y, 2),
@@ -303,12 +304,8 @@ for(let y = 1; y < 10; y++) {
       sudoku_cell(x, y, 8),
       sudoku_cell(x, y, 9),
     ]);
-  }
-}
 
-// Each square must contain at most one color.
-for(let y = 1; y < 10; y++) {
-  for(let x = 1; x < 10; x++) {
+    // At most one color.
     for(let j = 2; j < 10; j++) {
       for(let i = 1; i < j; i++) {
         sudoku_constraints.push([-sudoku_cell(x, y, i), -sudoku_cell(x, y, j)]);
