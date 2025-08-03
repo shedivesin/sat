@@ -1,98 +1,62 @@
-// This SAT solver is an implementation of Knuth's Algorithm B (TAOCP 7.2.2.2).
-// It's not the smallest SAT solver possible, but it is quite efficient for
-// what it is, and ought to be capable of the toy problems I'm playing with!
+// "Deoptimization" of Knuth's Algorithm B (TAOCP 7.2.2.2), to make it simpler
+// to understand. See also [1].
+//
+// [1]: https://smt.st/current_tree/solvers/SAT_WL/SAT_WL.py
+
+function dup(a) { return Array.from(a); }
+function dup2(a) { return Array.from(a, dup); }
+
+function to_var(l) { return Math.abs(l); }
+function to_idx(l) { return ((to_var(l) - 1) << 1) | (l >>> 31); }
+
+function backtrack(formula, watch, assignment, v, solutions) {
+  if(v >= assignment.length) { solutions.push(dup(assignment)); return; }
+
+  // FIXME
+}
+
 function solve(formula) {
-  // Validate the input and determine how many clauses, variables, and literals
-  // we'll have, so we can allocate our data structures. Input is expected to
-  // be an array of arrays of integers.
-  let m = 0;
+  // Validate input and count variables.
   let n = 0;
-  let p = 0;
 
   if(!Array.isArray(formula)) { throw new TypeError("Invalid formula"); }
 
   for(const clause of formula) {
     if(!Array.isArray(clause)) { throw new TypeError("Invalid clause"); }
+    if(!clause.length) { return []; } // UNSAT
 
-    // Empty clause means UNSAT.
-    if(clause.length === 0) { return []; }
+    for(const literal of clause) {
+      if(!Number.isInteger(literal)) { throw new TypeError("Invalid literal"); }
 
-    m += 1;
-    p += clause.length;
-
-    for(const l of clause) {
-      if(!Number.isInteger(l)) { throw new TypeError("Invalid literal"); }
-
-      const v = Math.abs(l);
+      const v = to_var(literal);
       if(!(v >= 1 && v < 2147483649)) { throw new RangeError("Invalid variable"); }
 
       if(v > n) { n = v; }
     }
   }
 
-  // Allocate and initialize data structures. L contains the LITERALs of the
-  // formula, converted to Knuth's format. S contains the STARTing index of
-  // each clause (plus a sentinel value at the end, so we can find the ending
-  // index of each clause, too). N contains the NEXT clause that contains
-  // the same watched literal as this one (the watched literal is always the
-  // first one in a clause), or zero if there is no such clause (it is okay to
-  // do this even though zero is a valid index, since the 0th clause will never
-  // link to itself). M contains an array of MOVEs for each variable, which
-  // acts as a recursion stack and also contains the output.
-  const buffer = new ArrayBuffer((p + m + 1 + m + n) * 4);
-  const L = new Uint32Array(buffer, 0, p);
-  const S = new Uint32Array(buffer, p * 4, m + 1);
-  const N = new Uint32Array(buffer, (p + m + 1) * 4, m);
-  const M = new Uint32Array(buffer, (p + m + 1 + m) * 4, n);
+  // Deep copy formula since we'll be modifying it.
+  formula = dup2(formula);
 
-  for(let i = 0, k = 0; i < formula.length; i++) {
-    S[i] = k;
+  // Make our watch lists.
+  const watch = new Array(n * 2);
+  for(let i = 0; i < watch.length; i++) { watch[i] = []; }
+  for(const clause of formula) { watch[to_idx(clause[0])].push(clause); }
 
-    const clause = formula[i];
-    for(let j = 0; j < clause.length; j++, k++) {
-      const l = clause[j];
-      L[k] = 2 * (Math.abs(l) - 1) + (l < 0);
-    }
-  }
-
-  S[m] = p;
-
-  for(let i = 0; i < m - 1; i++) {
-    for(let j = i + 1; j < m; j++) {
-      if((L[S[i]] >>> 1) === (L[S[j]] >>> 1)) {
-        N[i] = j;
-        break;
-      }
-    }
-  }
-
-  console.log(L);
-  console.log(S);
-  console.log(N);
-  console.log(M);
-
-  // FIXME: Run algorithm B!
-  for(let d = 0; d < n; d++) {
-  }
-
-  // Convert move array back to the input format.
-  const solution = new Array(n);
-  for(let i = 0; i < n; i++) {
-    solution[i] = (i + 1) * (1 - ((M[i] & 1) << 1));
-  }
-
-  return solution;
+  // Backtracking search.
+  const assignment = new Array(n).fill(0);
+  const solutions = [];
+  backtrack(formula, watch, assignment, 0, solutions);
+  return solutions;
 }
 
-console.log(
-  solve([
-    [ 1,  2, -3],
-    [ 2,  3, -4],
-    [ 3,  4,  1],
-    [ 4, -1,  2],
-    [-1, -2,  3],
-    [-2, -3,  4],
-    [-3, -4, -1],
-    // [-4, 1, -2], // uncommenting this lane will make the problem UNSAT
-  ]),
-);
+solve([ 
+  [ 1,  2, -3],
+  [ 2,  3, -4],
+  [ 3,  4,  1],
+  [ 4, -1,  2],
+  [-1, -2,  3], 
+  [-2, -3,  4],
+  [-3, -4, -1],
+  // [-4, 1, -2], // uncommenting this line will make the problem UNSAT
+]);
