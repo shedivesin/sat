@@ -9,10 +9,45 @@ function dup2(a) { return Array.from(a, dup); }
 function to_var(l) { return Math.abs(l); }
 function to_idx(l) { return ((to_var(l) - 1) << 1) | (l >>> 31); }
 
-function backtrack(formula, watch, assignment, v, solutions) {
-  if(v >= assignment.length) { solutions.push(dup(assignment)); return; }
+function assign(watch, assignment, p) {
+  assignment[to_var(p) - 1] = p;
 
-  // FIXME
+  const clauses = watch[to_idx(-p)];
+  while(clauses.length) {
+    const clause = clauses[0];
+    for(let i = 1; i < clause.length; i++) {
+      const q = clause[i];
+      // If Q is TBD or if it's assignment is true, we'll watch it, instead.
+      if(to_var(q) > to_var(p) || assignment[to_var(q) - 1] * Math.sign(q) >= 0) {
+        // Watch q, instead.
+        clause[i] = clause[0];
+        clause[0] = q;
+
+        // Move the clause to q's watchlist.
+        watch[to_idx(q)].unshift(clauses.shift());
+        break;
+      }
+    }
+
+    // Uh oh. We couldn't find a satisfying Q. UNSAT.
+    return false;
+  }
+
+  return true;
+}
+
+function backtrack(formula, watch, assignment, depth, solutions) {
+  if(depth >= assignment.length) { solutions.push(dup(assignment)); return; }
+
+  let l = depth + 1;
+  if(watch[to_idx(l)].length < 1 || watch[to_idx(-l)].length >= 1) { l = -l; }
+
+  if(assign(watch, assignment,  l)) {
+    backtrack(formula, watch, assignment, depth + 1, solutions);
+  }
+  if(assign(watch, assignment, -l)) {
+    backtrack(formula, watch, assignment, depth + 1, solutions);
+  }
 }
 
 function solve(formula) {
@@ -50,13 +85,15 @@ function solve(formula) {
   return solutions;
 }
 
-solve([ 
-  [ 1,  2, -3],
-  [ 2,  3, -4],
-  [ 3,  4,  1],
-  [ 4, -1,  2],
-  [-1, -2,  3], 
-  [-2, -3,  4],
-  [-3, -4, -1],
-  // [-4, 1, -2], // uncommenting this line will make the problem UNSAT
-]);
+console.log(
+  solve([ 
+    [ 1,  2, -3],
+    [ 2,  3, -4],
+    [ 3,  4,  1],
+    [ 4, -1,  2],
+    [-1, -2,  3], 
+    [-2, -3,  4],
+    [-3, -4, -1],
+    // [-4, 1, -2], // uncommenting this line will make the problem UNSAT
+  ]),
+);
