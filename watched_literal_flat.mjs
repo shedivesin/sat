@@ -32,7 +32,7 @@ function solve(formula) {
   // FIXME: Allocate one big ArrayBuffer and slice these out of it!
   const literals = new Uint32Array(p);
   const start = new Uint32Array(m + 1);
-  const watch = new Uint32Array(n * 2).fill(m);
+  const watch = new Uint32Array(n << 1).fill(m);
   const next = new Uint32Array(m).fill(m);
   const move = new Uint32Array(n);
 
@@ -43,7 +43,7 @@ function solve(formula) {
     const l = clause.length;
     for(let j = 0; j < l; j++, k++) {
       const literal = clause[j];
-      literals[k] = (Math.abs(literal) - 1) * 2 + (literal >>> 31);
+      literals[k] = ((Math.abs(literal) - 1) << 1) | (literal >>> 31);
     }
   }
 
@@ -51,7 +51,7 @@ function solve(formula) {
 
   for(let i = m; i--; ) {
     const literal = formula[i][0];
-    const j = (Math.abs(literal) - 1) * 2 + (literal >>> 31);
+    const j = ((Math.abs(literal) - 1) << 1) | (literal >>> 31);
     next[i] = watch[j];
     watch[j] = i;
   }
