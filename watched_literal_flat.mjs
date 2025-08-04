@@ -56,33 +56,48 @@ function solve(formula) {
     watch[j] = i;
   }
 
+  console.log(
+    "literals=(%s)\nstart=(%s)\nwatch=(%s)\nnext=(%s)",
+    literals.join(" "),
+    start.join(" "),
+    watch.join(" "),
+    next.join(" "),
+  );
+
   // BACKTRACKING SEARCH
   // B1. Initialize.
   // B2. Rejoice or choose.
   b2: for(let d = 0; d < n; ) {
     move[d] = (watch[d << 1] >= m) | (watch[(d << 1) | 1] < m);
     let l = (d << 1) | move[d];
-    console.log(
-      "literals=(%s)\nstart=(%s)\nwatch=(%s)\nnext=(%s)\nmove=(%s)",
-      literals.join(" "),
-      start.join(" "),
-      watch.join(" "),
-      next.join(" "),
-      move.join(" "),
-    );
 
-    console.log("d=%d move[d]=%d l=%d", d, move[d], l);
+    {
+      const w = [];
+      for(let j = watch[l ^ 1]; j < m; j = next[j]) {
+        w.push(j);
+      }
+
+      console.log(
+        "\nd=%d move=(%s) l=%d watch[-l]=(%s)",
+        d,
+        Array.from(move).slice(0, d + 1).join(" "),
+        l,
+        w.join(" "),
+      );
+    }
 
     // B3. Remove -l if possible.
     b3: for(let j = watch[l ^ 1]; j < m; ) {
       const i = start[j];
       const i_p = start[j + 1];
       const j_p = next[j];
+
       for(let k = i + 1; k < i_p; k++) {
         const l_p = literals[k];
         // If l_p isn't false (e.g. is TBD or is true), then watch it, instead.
         // FIXME: see (57)
         if((l_p >> 1) > d || ((l_p + move[l_p >> 1]) & 1) === 0) {
+          console.log("  j=%d swap %d and %d", j, l ^ 1, l_p);
           literals[i] = l_p;
           literals[k] = l ^ 1;
           next[j] = watch[l_p];
@@ -94,6 +109,7 @@ function solve(formula) {
 
       // Can't stop watching -l.
       watch[l ^ 1] = j;
+      console.log("  j=%d can't stop watching -l", j);
 
       // B5. Try again.
       b5: for(;;) {
@@ -112,6 +128,13 @@ function solve(formula) {
 
     // B4. Advance.
     watch[l ^ 1] = m;
+    console.log(
+      "literals=(%s)\nwatch=(%s)\nnext=(%s)",
+      literals.join(" "),
+      watch.join(" "),
+      next.join(" "),
+    );
+
     d++;
   }
 
@@ -135,4 +158,4 @@ console.log(
     [-3, -4, -1],
   ]),
 );
-console.log("(should be [-1, 2, *, 4])");
+console.log("(should be", [-1, 2, undefined, 4], ")");
