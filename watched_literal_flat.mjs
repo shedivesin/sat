@@ -1,17 +1,14 @@
-function watch_lists(m, watch, next) {
-  const n = watch.length;
-  const lists = new Array(n);
+function to_dimacs(move) {
+  const n = move.length;
+  const solution = new Array(n);
   for(let i = 0; i < n; i++) {
-    const list = [];
-    for(let j = watch[i]; j < m; j = next[j]) {
-      list.push(j);
-    }
-    lists[i] = "(" + list.join(" ") + ")";
+    solution[i] = (i + 1) * (1 - ((move[i] & 1) << 1));
   }
-  return "(" + lists.join(" ") + ")";
+
+  return solution;
 }
 
-function solve(formula) {
+function solve(formula, mapper=to_dimacs) {
   // VALIDATE INPUT AND DETERMINE CNF PARAMETERS
   if(!Array.isArray(formula)) { throw new TypeError("Invalid formula"); }
 
@@ -37,8 +34,6 @@ function solve(formula) {
       if(variable > n) { n = variable; }
     }
   }
-
-  /*console.log("m=%d n=%d p=%d", m, n, p);*/
 
   // ALLOCATE AND INITIALIZE DATA STRUCTURES
   // FIXME: Allocate one big ArrayBuffer and slice these out of it!
@@ -68,27 +63,12 @@ function solve(formula) {
     watch[j] = i;
   }
 
-  /*console.log(
-    "literals=(%s)\nstart=(%s)\nwatch=%s",
-    literals.join(" "),
-    start.join(" "),
-    watch_lists(m, watch, next),
-  );*/
-
   // BACKTRACKING SEARCH
   // B1. Initialize.
   // B2. Rejoice or choose.
   b2: for(let d = 0; d < n; ) {
     move[d] = (watch[d << 1] >= m) | (watch[(d << 1) | 1] < m);
     let l = (d << 1) | move[d];
-
-    /*console.log(
-      "\nd=%d move=(%s) l=%d -l=%d",
-      d,
-      Array.from(move).slice(0, d + 1).join(" "),
-      l,
-      l ^ 1,
-    );*/
 
     // B3. Remove -l if possible.
     b3: for(let j = watch[l ^ 1]; j < m; ) {
@@ -100,7 +80,6 @@ function solve(formula) {
         const l_p = literals[k];
         // If l_p isn't false (e.g. is TBD or is true), then watch it, instead.
         if((l_p >> 1) > d || ((l_p + move[l_p >> 1]) & 1) === 0) {
-          /*console.log("  j=%d swap %d and %d", j, l ^ 1, l_p);*/
           literals[i] = l_p;
           literals[k] = l ^ 1;
           next[j] = watch[l_p];
@@ -112,12 +91,10 @@ function solve(formula) {
 
       // Can't stop watching -l.
       watch[l ^ 1] = j;
-      /*console.log("  j=%d can't stop watching -l", j);*/
 
       // B5. Try again.
       b5: for(;;) {
         if(move[d] < 2) {
-          /*console.log("  move[d]=%d, flip l and try again", move[d]);*/
           move[d] ^= 3;
           l ^= 1;
           j = watch[l ^ 1];
@@ -125,8 +102,6 @@ function solve(formula) {
         }
 
         // B6. Backtrack.
-        /*console.log("  move[d]=%d, backtrack", move[d]);*/
-
         if(d < 1) { return null; } // UNSAT
 
         d--;
@@ -136,22 +111,11 @@ function solve(formula) {
 
     // B4. Advance.
     watch[l ^ 1] = m;
-    /*console.log(
-      "literals=(%s)\nwatch=%s",
-      literals.join(" "),
-      watch_lists(m, watch, next),
-    );*/
-
     d++;
   }
 
   // CONVERT OUTPUT AND RETURN
-  const solution = new Array(n);
-  for(let i = 0; i < n; i++) {
-    solution[i] = (i + 1) * (1 - ((move[i] & 1) << 1));
-  }
-
-  return solution;
+  return mapper(move);
 }
 
 console.log(
@@ -197,7 +161,34 @@ function n_queens(n) {
   return formula;
 }
 
-console.log(solve(n_queens(1)));
-console.log(solve(n_queens(2)));
-console.log(solve(n_queens(3)));
-console.log(solve(n_queens(4)));
+function to_chess_notation(move) {
+  const n = move.length;
+  const k = Math.floor(Math.sqrt(n));
+  if(!(k >= 1 && k < 27 && n === k * k)) { throw new Error("Invalid board size"); }
+
+  const squares = [];
+  for(let i = 0; i < n; i++) {
+    if(move[i] & 1) { continue; }
+
+    const x = i % k;
+    const y = Math.floor(i / k);
+    if(!(x >= 0 && x < k && y >= 0 && y < k)) { continue; }
+
+    squares.push(String.fromCharCode(97 + x) + (y + 1));
+  }
+
+  return squares.sort().join(" ");
+}
+
+console.time("4 queens");
+console.log(solve(n_queens(4), to_chess_notation));
+console.timeEnd("4 queens");
+console.time("8 queens");
+console.log(solve(n_queens(8), to_chess_notation));
+console.timeEnd("8 queens");
+console.time("10 queens");
+console.log(solve(n_queens(10), to_chess_notation));
+console.timeEnd("10 queens");
+console.time("20 queens");
+console.log(solve(n_queens(20), to_chess_notation));
+console.timeEnd("20 queens");
