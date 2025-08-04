@@ -38,7 +38,7 @@ function solve(formula) {
     }
   }
 
-  console.log("m=%d n=%d p=%d", m, n, p);
+  /*console.log("m=%d n=%d p=%d", m, n, p);*/
 
   // ALLOCATE AND INITIALIZE DATA STRUCTURES
   // FIXME: Allocate one big ArrayBuffer and slice these out of it!
@@ -68,12 +68,12 @@ function solve(formula) {
     watch[j] = i;
   }
 
-  console.log(
+  /*console.log(
     "literals=(%s)\nstart=(%s)\nwatch=%s",
     literals.join(" "),
     start.join(" "),
     watch_lists(m, watch, next),
-  );
+  );*/
 
   // BACKTRACKING SEARCH
   // B1. Initialize.
@@ -82,13 +82,13 @@ function solve(formula) {
     move[d] = (watch[d << 1] >= m) | (watch[(d << 1) | 1] < m);
     let l = (d << 1) | move[d];
 
-    console.log(
+    /*console.log(
       "\nd=%d move=(%s) l=%d -l=%d",
       d,
       Array.from(move).slice(0, d + 1).join(" "),
       l,
       l ^ 1,
-    );
+    );*/
 
     // B3. Remove -l if possible.
     b3: for(let j = watch[l ^ 1]; j < m; ) {
@@ -100,7 +100,7 @@ function solve(formula) {
         const l_p = literals[k];
         // If l_p isn't false (e.g. is TBD or is true), then watch it, instead.
         if((l_p >> 1) > d || ((l_p + move[l_p >> 1]) & 1) === 0) {
-          console.log("  j=%d swap %d and %d", j, l ^ 1, l_p);
+          /*console.log("  j=%d swap %d and %d", j, l ^ 1, l_p);*/
           literals[i] = l_p;
           literals[k] = l ^ 1;
           next[j] = watch[l_p];
@@ -112,20 +112,20 @@ function solve(formula) {
 
       // Can't stop watching -l.
       watch[l ^ 1] = j;
-      console.log("  j=%d can't stop watching -l", j);
+      /*console.log("  j=%d can't stop watching -l", j);*/
 
       // B5. Try again.
       b5: for(;;) {
         if(move[d] < 2) {
-          console.log("  move[d]=%d, flip l and try again", move[d]);
+          /*console.log("  move[d]=%d, flip l and try again", move[d]);*/
           move[d] ^= 3;
           l ^= 1;
-          j = watch[l ^ 1]; // Necessary since we can't GOTO B3 in JavaScript.
+          j = watch[l ^ 1];
           continue b3;
         }
 
         // B6. Backtrack.
-        console.log("  move[d]=%d, backtrack", move[d]);
+        /*console.log("  move[d]=%d, backtrack", move[d]);*/
 
         if(d < 1) { return null; } // UNSAT
 
@@ -136,11 +136,11 @@ function solve(formula) {
 
     // B4. Advance.
     watch[l ^ 1] = m;
-    console.log(
+    /*console.log(
       "literals=(%s)\nwatch=%s",
       literals.join(" "),
       watch_lists(m, watch, next),
-    );
+    );*/
 
     d++;
   }
@@ -166,3 +166,38 @@ console.log(
   ]),
 );
 console.log("(should be", [-1, 2, undefined, 4], ")");
+
+function n_queens(n) {
+  const formula = [];
+
+  // There should be a queen in each row.
+  for(let y = 0; y < n; y++) {
+    const row = new Array(n);
+    for(let x = 0; x < n; x++) {
+      row[x] = y * n + x + 1;
+    }
+
+    formula.push(row);
+  }
+
+  for(let x = 0; x < n; x++) {
+    for(let y2 = 1; y2 < n; y2++) {
+      for(let y1 = 0; y1 < y2; y1++) {
+        const x1 = x + y1 - y2;
+        if(x1 >= 0) { formula.push([-(y1 * n + x + 1), -(y2 * n + x1 + 1)]); }
+
+        formula.push([-(y1 * n + x + 1), -(y2 * n + x + 1)]);
+
+        const x2 = x + y2 - y1;
+        if(x2 <  n) { formula.push([-(y1 * n + x + 1), -(y2 * n + x2 + 1)]); }
+      }
+    }
+  }
+
+  return formula;
+}
+
+console.log(solve(n_queens(1)));
+console.log(solve(n_queens(2)));
+console.log(solve(n_queens(3)));
+console.log(solve(n_queens(4)));
