@@ -135,3 +135,4 @@ console.log(
     [-3, -4, -1],
   ]),
 );
+console.log("(should be [-1, 2, *, 4])");
