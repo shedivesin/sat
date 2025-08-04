@@ -26,6 +26,8 @@ function solve(formula) {
     }
   }
 
+  console.log("m=%d n=%d p=%d", m, n, p);
+
   // ALLOCATE AND INITIALIZE DATA STRUCTURES
   // FIXME: Allocate one big ArrayBuffer and slice these out of it!
   const literals = new Uint32Array(p);
@@ -54,10 +56,27 @@ function solve(formula) {
     watch[j] = i;
   }
 
-  console.log("literals = (%s)", literals.join(" "));
-  console.log("start = (%s)", start.join(" "));
-  console.log("watch = (%s)", watch.join(" "));
-  console.log("next = (%s)", next.join(" "));
+  console.log(
+    "literals=(%s)\nstart=(%s)\nwatch=(%s)\nnext=(%s)",
+    literals.join(" "),
+    start.join(" "),
+    watch.join(" "),
+    next.join(" "),
+  );
+
+  // BACKTRACKING SEARCH
+  // B1. Initialize.
+  let d = 0;
+
+  // B2. Rejoice or choose.
+  // while(d < m) {
+    move[d] = (watch[d << 1] >= m) | (watch[(d << 1) | 1] < m);
+    let l = (d << 1) | move[d];
+    console.log("d=%d move[d]=%d l=%d", d, move[d], l);
+
+    // B3. Remove -l if possible.
+    // FIXME
+  //}
 }
 
 solve([ 
