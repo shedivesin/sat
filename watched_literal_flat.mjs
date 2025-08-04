@@ -1,3 +1,16 @@
+function watch_lists(m, watch, next) {
+  const n = watch.length;
+  const lists = new Array(n);
+  for(let i = 0; i < n; i++) {
+    const list = [];
+    for(let j = watch[i]; j < m; j = next[j]) {
+      list.push(j);
+    }
+    lists[i] = "(" + list.join(" ") + ")";
+  }
+  return "(" + lists.join(" ") + ")";
+}
+
 function solve(formula) {
   // VALIDATE INPUT AND DETERMINE CNF PARAMETERS
   if(!Array.isArray(formula)) { throw new TypeError("Invalid formula"); }
@@ -20,7 +33,6 @@ function solve(formula) {
  
       const variable = Math.abs(literal);
       if(!(variable >= 1)) { throw new RangeError("Invalid variable"); }
-      if(!(variable < 2147483649)) { throw new RangeError("Too many variables"); }
 
       if(variable > n) { n = variable; }
     }
@@ -57,11 +69,10 @@ function solve(formula) {
   }
 
   console.log(
-    "literals=(%s)\nstart=(%s)\nwatch=(%s)\nnext=(%s)",
+    "literals=(%s)\nstart=(%s)\nwatch=%s",
     literals.join(" "),
     start.join(" "),
-    watch.join(" "),
-    next.join(" "),
+    watch_lists(m, watch, next),
   );
 
   // BACKTRACKING SEARCH
@@ -71,20 +82,13 @@ function solve(formula) {
     move[d] = (watch[d << 1] >= m) | (watch[(d << 1) | 1] < m);
     let l = (d << 1) | move[d];
 
-    {
-      const w = [];
-      for(let j = watch[l ^ 1]; j < m; j = next[j]) {
-        w.push(j);
-      }
-
-      console.log(
-        "\nd=%d move=(%s) l=%d watch[-l]=(%s)",
-        d,
-        Array.from(move).slice(0, d + 1).join(" "),
-        l,
-        w.join(" "),
-      );
-    }
+    console.log(
+      "\nd=%d move=(%s) l=%d -l=%d",
+      d,
+      Array.from(move).slice(0, d + 1).join(" "),
+      l,
+      l ^ 1,
+    );
 
     // B3. Remove -l if possible.
     b3: for(let j = watch[l ^ 1]; j < m; ) {
@@ -95,7 +99,6 @@ function solve(formula) {
       for(let k = i + 1; k < i_p; k++) {
         const l_p = literals[k];
         // If l_p isn't false (e.g. is TBD or is true), then watch it, instead.
-        // FIXME: see (57)
         if((l_p >> 1) > d || ((l_p + move[l_p >> 1]) & 1) === 0) {
           console.log("  j=%d swap %d and %d", j, l ^ 1, l_p);
           literals[i] = l_p;
@@ -114,6 +117,7 @@ function solve(formula) {
       // B5. Try again.
       b5: for(;;) {
         if(move[d] < 2) {
+          console.log("  move[d]=%d, flip l and try again", move[d]);
           move[d] ^= 3;
           l ^= 1;
           j = watch[l ^ 1]; // Necessary since we can't GOTO B3 in JavaScript.
@@ -121,18 +125,21 @@ function solve(formula) {
         }
 
         // B6. Backtrack.
+        console.log("  move[d]=%d, backtrack", move[d]);
+
         if(d < 1) { return null; } // UNSAT
+
         d--;
+        l = (d << 1) | move[d];
       }
     }
 
     // B4. Advance.
     watch[l ^ 1] = m;
     console.log(
-      "literals=(%s)\nwatch=(%s)\nnext=(%s)",
+      "literals=(%s)\nwatch=%s",
       literals.join(" "),
-      watch.join(" "),
-      next.join(" "),
+      watch_lists(m, watch, next),
     );
 
     d++;
