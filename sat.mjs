@@ -11,149 +11,173 @@ import {deepStrictEqual as assert_equal} from "node:assert";
 // It turns out that this is a very natural way to express logic puzzles (among
 // others).
 //
-// There are a number of ways to solve the problem. The main categories are
-// recursive search on variables, recursive search on clauses, and stochastic
-// search. This particular solver is of the first category, following [1], and
-// was chosen for simplicity rather than speed. (I expect it to be several
-// orders of magnitude slower production solvers.) Nonetheless, I have made
-// basic optimizations in order to keep it from being TOO stupid.
-//
-// The tests come from Knuth, The Art of Computer Programming, vol. 4 fasc. 6
-// "Satisfiability."
-//
-// [1]: https://web.archive.org/web/20201109101535/http://www.cse.chalmers.se/~algehed/blogpostsHTML/SAT.html
+// There are a number of ways to solve the problem, each with their own
+// peculiarities. The best overall introduction, of course, is Donald Knuth,
+// The Art of Computer Programming, vol. 4 fasc. 6 "Satisfiability." I've
+// implemented (versions of) his Algorithm A, B, P, and W; the version seen
+// here is a version of Algorithm B, as being pretty simple and fast enough
+// for the toy problems I'm playing with. (Honestly, if you want performance,
+// JavaScript isn't the way to implement your solution.)
 
-// If clause contains literal, the clause is satisfied: return null. Otherwise,
-// return the clause with all instances of -literal removed. (As an
-// optimization, if clause does not contain any instances of -literal, the
-// original array is returned.)
-function simplify_clause(clause, literal) {
-  const n = clause.length;
-
-  // If clause contains literal, return null. Also count how many times clause
-  // contains -literal.
-  let i = n;
-  let j = 0;
-  while(i) {
-    const l = clause[--i];
-    if(l ===  literal) { return null; }
-    if(l === -literal) { ++j; }
-  }
-
-  // OPTIMIZATION: If clause contains -literal zero times, then just return it.
-  // This prevents us from allocating a new array.
-  if(!j) { return clause; }
-
-  // Create and return a copy of clause with all instances of -literal removed.
-  i = n;
-  j = n - j;
-  const simplified = new Array(j);
-  while(i) {
-    const l = clause[--i];
-    if(l !== -literal) { simplified[--j] = l; }
-  }
-
-  return simplified;
-}
-
-// Return a copy of the formula with all clauses containing literal removed,
-// and with all instances of -literal removed from their respective clauses.
-// NB: Unlike simplify_clause(), simplify_formula() always makes a copy of
-// the original formula. This is simply because it is only ever called with
-// literals that are known to be in it, so it will always be modified.
-function simplify_formula(formula, literal) {
-  const n = formula.length;
-  const f = new Array(n);
-  let j = 0;
+function to_dimacs(move) {
+  const n = move.length;
+  const solution = new Array(n);
   for(let i = 0; i < n; i++) {
-    const c = simplify_clause(formula[i], literal);
-    if(c === null) { continue; }
-    if(c.length === 0) { return null; }
-
-    f[j++] = c;
+    solution[i] = (i + 1) * (1 - ((move[i] & 1) << 1));
   }
 
-  f.length = j;
-  return f;
+  return solution;
 }
 
-// Prepend literal to every solution in a list of solutions. This modifies the
-// input arrays, which is a little evil, but it's safe in this case since the
-// input arrays (in solve()) are never used elsewhere.
-function append(solutions, literal) {
-  for(const solution of solutions) { solution.push(literal); }
-  return solutions;
-}
+function solve(formula, mapper=to_dimacs) {
+  // VALIDATE INPUT AND DETERMINE CNF PARAMETERS
+  if(!Array.isArray(formula)) { throw new TypeError("Invalid formula"); }
 
-// Return EVERY POSSIBLE solution to the given CNF formula. (An empty array
-// means there are no solutions and the formula is UNSAT.)
-// NB: Be careful! There may be many!
-function solve(formula) {
-  // A null formula is one in which a contradiction has been found. (See
-  // simplify_formula().) That's UNSAT, so return no solutions.
-  if(formula === null) { return []; }
+  const m = formula.length;
+  let n = 0;
+  let p = 0;
+  for(let i = 0; i < m; i++) {
+    const clause = formula[i];
+    if(!Array.isArray(clause)) { throw new TypeError("Invalid clause"); }
 
-  // A formula with no clauses has a trivial solution.
-  if(formula.length === 0) { return [[]]; }
+    const l = clause.length;
+    if(l < 1) { return null; } // UNSAT
 
-  // If there are any unit clauses, then favor them.
-  for(const clause of formula) {
-    if(clause.length === 1) {
-      const l = clause[0];
-      return append(solve(simplify_formula(formula, l)), l);
+    p += l;
+
+    for(let j = 0; j < l; j++) {
+      const literal = clause[j];
+      if(!Number.isInteger(literal)) { throw new TypeError("Invalid literal"); }
+ 
+      const variable = Math.abs(literal);
+      if(!(variable >= 1)) { throw new RangeError("Invalid variable"); }
+
+      if(variable > n) { n = variable; }
     }
   }
 
-  // Pick an arbitrary variable from the formula, and (recursively) try to
-  // solve the formulas that result from assuming it to be either true or
-  // false. If we find any solutions, simply prepend our assumptions to them.
-  const l = formula[0][0];
-  return append(solve(simplify_formula(formula, l)), l).
-    concat(append(solve(simplify_formula(formula, -l)), -l));
-}
+  // ALLOCATE AND INITIALIZE DATA STRUCTURES
+  // FIXME: I wonder if it's faster to simply have one Uint32Array and offsets
+  // into it...
+  const buffer = new ArrayBuffer(p * 4 + m * 8 + n * 12 + 4);
+  const literals = new Uint32Array(buffer, 0, p);
+  const start = new Uint32Array(buffer, p * 4, m + 1);
+  const watch = new Uint32Array(buffer, p * 4 + m * 4 + 4, n * 2).fill(m);
+  const next = new Uint32Array(buffer, p * 4 + m * 4 + n * 8 + 4, m).fill(m);
+  const move = new Uint32Array(buffer, p * 4 + m * 8 + n * 8 + 4, n);
 
-function by_variable(a, b) {
-  return Math.abs(a) - Math.abs(b);
-}
+  for(let i = 0, k = 0; i < m; i++) {
+    start[i] = k;
 
-function sort_by_variable(solutions) {
-  for(const solution of solutions) { solution.sort(by_variable); }
-  return solutions;
+    const clause = formula[i];
+    const l = clause.length;
+    for(let j = 0; j < l; j++, k++) {
+      const literal = clause[j];
+      literals[k] = ((Math.abs(literal) - 1) << 1) | (literal >>> 31);
+    }
+  }
+
+  start[m] = p;
+
+  for(let i = m; i--; ) {
+    const literal = formula[i][0];
+    const j = ((Math.abs(literal) - 1) << 1) | (literal >>> 31);
+    next[i] = watch[j];
+    watch[j] = i;
+  }
+
+  // BACKTRACKING SEARCH
+  // B1. Initialize.
+  let d = 0;
+
+  // B2. Rejoice or choose.
+  b2: while(d < n) {
+    move[d] = (watch[d << 1] >= m) | (watch[(d << 1) | 1] < m);
+    let l = (d << 1) | move[d];
+
+    // B3. Remove -l if possible.
+    let j = watch[l ^ 1];
+
+    b3: while(j < m) {
+      const i = start[j];
+      const i_p = start[j + 1];
+      const j_p = next[j];
+
+      for(let k = i + 1; k < i_p; k++) {
+        const l_p = literals[k];
+        // If l_p isn't false (e.g. is TBD or is true), then watch it, instead.
+        if((l_p >> 1) > d || ((l_p + move[l_p >> 1]) & 1) === 0) {
+          literals[i] = l_p;
+          literals[k] = l ^ 1;
+          next[j] = watch[l_p];
+          watch[l_p] = j;
+          j = j_p;
+          continue b3;
+        }
+      }
+
+      // Can't stop watching -l.
+      watch[l ^ 1] = j;
+
+      // B5. Try again.
+      b5: for(;;) {
+        if(move[d] < 2) {
+          move[d] ^= 3;
+          l = (d << 1) | (move[d] & 1);
+          j = watch[l ^ 1];
+          continue b3;
+        }
+
+        // B6. Backtrack.
+        if(d < 1) { return null; } // UNSAT
+        d--;
+      }
+    }
+
+    // B4. Advance.
+    watch[l ^ 1] = m;
+    d++;
+  }
+
+  // CONVERT OUTPUT AND RETURN
+  return mapper(move);
 }
 
 assert_equal(
-  sort_by_variable(solve([[1, 2], [-1, 3], [-3, 4], [1]])),
-  [[1, 3, 4]],
-  "a simple 2SAT formula",
+  solve([[1, 2], [-1, 3], [-3, 4], [1]]),
+  [1, 2, 3, 4],
+  "Should solve a simple 2SAT formula.",
 );
 
 assert_equal(
-  sort_by_variable(solve([
+  solve([
     [1, 2, -3], [2, 3, -4], [1, 3, 4], [-1, 2, 4],
     [-1, -2, 3], [-2, -3, 4], [-3, -4, -1], [1, -2, -4],
-  ])),
-  [],
-  "the \"shortest interesting formula in 3CNF\"",
+  ]),
+  null,
+  "Should fail to solve the \"shortest interesting formula in 3CNF.\"",
 );
 
 assert_equal(
-  sort_by_variable(solve([
+  solve([
+    [1, 2, -3], [2, 3, -4], [1, 3, 4], [-1, 2, 4],
+    [-1, -2, 3], [-2, -3, 4], [-3, -4, -1],
+  ]),
+  [-1, 2, -3, 4], // NB: 3 can be positive or negative.
+  "Should solve Knuth's eq. 7, \"nice test data.\""
+);
+
+assert_equal(
+  solve([
     [1, 2, 3], [-1, -2, -3], [1, 3, 5], [-1, -3, -5],
     [1, 4, 7], [-1, -4, -7], [2, 3, 4], [-2, -3, -4],
     [2, 4, 6], [-2, -4, -6], [2, 5, 8], [-2, -5, -8],
     [3, 4, 5], [-3, -4, -5], [3, 5, 7], [-3, -5, -7],
     [4, 5, 6], [-4, -5, -6], [4, 6, 8], [-4, -6, -8],
     [5, 6, 7], [-5, -6, -7], [6, 7, 8], [-6, -7, -8],
-  ])),
-  [
-    [ 1, -2, -3,  4,  5, -6, -7,  8],
-    [ 1, -2,  3, -4, -5,  6, -7,  8],
-    [ 1,  2, -3, -4,  5,  6, -7, -8],
-    [-1,  2,  3, -4, -5,  6,  7, -8],
-    [-1,  2, -3,  4,  5, -6,  7, -8],
-    [-1, -2,  3,  4, -5, -6,  7,  8],
-  ],
-  "Knuth's sample van der Waerden problem",
+  ]),
+  [-1, -2, 3, 4, -5, -6, 7, 8],
+  "Should solve Knuth's sample van der Waerden problem.",
 );
 
 
@@ -164,6 +188,7 @@ assert_equal(
 // a single variable to "is there a queen on this square?" for each square of
 // the board, and then make sure that there's at least one queen in each row,
 // and at most one queen in each column and diagonal.
+
 function n_queens(n) {
   const formula = [];
 
@@ -196,18 +221,17 @@ function n_queens(n) {
   return formula;
 }
 
-function to_chess_notation(solution) {
-  const n = solution.length;
+function to_chess_notation(move) {
+  const n = move.length;
   const k = Math.floor(Math.sqrt(n));
   if(!(k >= 1 && k < 27 && n === k * k)) { throw new Error("Invalid board size"); }
 
   const squares = [];
   for(let i = 0; i < n; i++) {
-    const l = solution[i];
-    if(!(l >= 1)) { continue; }
+    if(move[i] & 1) { continue; }
 
-    const x = ((l - 1) % k);
-    const y = Math.floor((l - 1) / k);
+    const x = i % k;
+    const y = Math.floor(i / k);
     if(!(x >= 0 && x < k && y >= 0 && y < k)) { continue; }
 
     squares.push(String.fromCharCode(97 + x) + (y + 1));
@@ -216,76 +240,29 @@ function to_chess_notation(solution) {
   return squares.sort().join(" ");
 }
 
-console.time("4-Queens");
 assert_equal(
-  solve(n_queens(4)).map(to_chess_notation).sort(),
-  ["a2 b4 c1 d3", "a3 b1 c4 d2"],
+  solve(n_queens(3), to_chess_notation),
+  null,
+  "Should fail to solve the 3-Queens puzzle.",
+);
+
+assert_equal(
+  solve(n_queens(4), to_chess_notation),
+  "a2 b4 c1 d3", // NB: One of 2 solutions.
   "Should solve the 4-Queens puzzle.",
 );
-console.timeEnd("4-Queens");
 
-console.time("8-Queens");
 assert_equal(
-  solve(n_queens(8)).map(to_chess_notation).sort(),
-  [
-    "a1 b5 c8 d6 e3 f7 g2 h4", "a1 b6 c8 d3 e7 f4 g2 h5",
-    "a1 b7 c4 d6 e8 f2 g5 h3", "a1 b7 c5 d8 e2 f4 g6 h3",
-    "a2 b4 c6 d8 e3 f1 g7 h5", "a2 b5 c7 d1 e3 f8 g6 h4",
-    "a2 b5 c7 d4 e1 f8 g6 h3", "a2 b6 c1 d7 e4 f8 g3 h5",
-    "a2 b6 c8 d3 e1 f4 g7 h5", "a2 b7 c3 d6 e8 f5 g1 h4",
-    "a2 b7 c5 d8 e1 f4 g6 h3", "a2 b8 c6 d1 e3 f5 g7 h4",
-    "a3 b1 c7 d5 e8 f2 g4 h6", "a3 b5 c2 d8 e1 f7 g4 h6",
-    "a3 b5 c2 d8 e6 f4 g7 h1", "a3 b5 c7 d1 e4 f2 g8 h6",
-    "a3 b5 c8 d4 e1 f7 g2 h6", "a3 b6 c2 d5 e8 f1 g7 h4",
-    "a3 b6 c2 d7 e1 f4 g8 h5", "a3 b6 c2 d7 e5 f1 g8 h4",
-    "a3 b6 c4 d1 e8 f5 g7 h2", "a3 b6 c4 d2 e8 f5 g7 h1",
-    "a3 b6 c8 d1 e4 f7 g5 h2", "a3 b6 c8 d1 e5 f7 g2 h4",
-    "a3 b6 c8 d2 e4 f1 g7 h5", "a3 b7 c2 d8 e5 f1 g4 h6",
-    "a3 b7 c2 d8 e6 f4 g1 h5", "a3 b8 c4 d7 e1 f6 g2 h5",
-    "a4 b1 c5 d8 e2 f7 g3 h6", "a4 b1 c5 d8 e6 f3 g7 h2",
-    "a4 b2 c5 d8 e6 f1 g3 h7", "a4 b2 c7 d3 e6 f8 g1 h5",
-    "a4 b2 c7 d3 e6 f8 g5 h1", "a4 b2 c7 d5 e1 f8 g6 h3",
-    "a4 b2 c8 d5 e7 f1 g3 h6", "a4 b2 c8 d6 e1 f3 g5 h7",
-    "a4 b6 c1 d5 e2 f8 g3 h7", "a4 b6 c8 d2 e7 f1 g3 h5",
-    "a4 b6 c8 d3 e1 f7 g5 h2", "a4 b7 c1 d8 e5 f2 g6 h3",
-    "a4 b7 c3 d8 e2 f5 g1 h6", "a4 b7 c5 d2 e6 f1 g3 h8",
-    "a4 b7 c5 d3 e1 f6 g8 h2", "a4 b8 c1 d3 e6 f2 g7 h5",
-    "a4 b8 c1 d5 e7 f2 g6 h3", "a4 b8 c5 d3 e1 f7 g2 h6",
-    "a5 b1 c4 d6 e8 f2 g7 h3", "a5 b1 c8 d4 e2 f7 g3 h6",
-    "a5 b1 c8 d6 e3 f7 g2 h4", "a5 b2 c4 d6 e8 f3 g1 h7",
-    "a5 b2 c4 d7 e3 f8 g6 h1", "a5 b2 c6 d1 e7 f4 g8 h3",
-    "a5 b2 c8 d1 e4 f7 g3 h6", "a5 b3 c1 d6 e8 f2 g4 h7",
-    "a5 b3 c1 d7 e2 f8 g6 h4", "a5 b3 c8 d4 e7 f1 g6 h2",
-    "a5 b7 c1 d3 e8 f6 g4 h2", "a5 b7 c1 d4 e2 f8 g6 h3",
-    "a5 b7 c2 d4 e8 f1 g3 h6", "a5 b7 c2 d6 e3 f1 g4 h8",
-    "a5 b7 c2 d6 e3 f1 g8 h4", "a5 b7 c4 d1 e3 f8 g6 h2",
-    "a5 b8 c4 d1 e3 f6 g2 h7", "a5 b8 c4 d1 e7 f2 g6 h3",
-    "a6 b1 c5 d2 e8 f3 g7 h4", "a6 b2 c7 d1 e3 f5 g8 h4",
-    "a6 b2 c7 d1 e4 f8 g5 h3", "a6 b3 c1 d7 e5 f8 g2 h4",
-    "a6 b3 c1 d8 e4 f2 g7 h5", "a6 b3 c1 d8 e5 f2 g4 h7",
-    "a6 b3 c5 d7 e1 f4 g2 h8", "a6 b3 c5 d8 e1 f4 g2 h7",
-    "a6 b3 c7 d2 e4 f8 g1 h5", "a6 b3 c7 d2 e8 f5 g1 h4",
-    "a6 b3 c7 d4 e1 f8 g2 h5", "a6 b4 c1 d5 e8 f2 g7 h3",
-    "a6 b4 c2 d8 e5 f7 g1 h3", "a6 b4 c7 d1 e3 f5 g2 h8",
-    "a6 b4 c7 d1 e8 f2 g5 h3", "a6 b8 c2 d4 e1 f7 g5 h3",
-    "a7 b1 c3 d8 e6 f4 g2 h5", "a7 b2 c4 d1 e8 f5 g3 h6",
-    "a7 b2 c6 d3 e1 f4 g8 h5", "a7 b3 c1 d6 e8 f5 g2 h4",
-    "a7 b3 c8 d2 e5 f1 g6 h4", "a7 b4 c2 d5 e8 f1 g3 h6",
-    "a7 b4 c2 d8 e6 f1 g3 h5", "a7 b5 c3 d1 e6 f8 g2 h4",
-    "a8 b2 c4 d1 e7 f5 g3 h6", "a8 b2 c5 d3 e1 f7 g4 h6",
-    "a8 b3 c1 d6 e2 f5 g7 h4", "a8 b4 c1 d3 e6 f2 g7 h5",
-  ],
+  solve(n_queens(8), to_chess_notation),
+  "a3 b6 c4 d2 e8 f5 g7 h1", // NB: One of 92 solutions.
   "Should solve the 8-Queens puzzle.",
 );
-console.timeEnd("8-Queens");
 
-console.time("10-Queens");
 assert_equal(
-  solve(n_queens(10)).length,
-  724,
-  "Should count the solutions to the 10-Queens puzzle.",
+  solve(n_queens(12), to_chess_notation),
+  "a6 b8 c5 d11 e4 f10 g7 h3 i12 j2 k9 l1", // NB: One of 14,200 solutions.
+  "Should solve the 12-Queens puzzle.",
 );
-console.timeEnd("10-Queens");
 
 
 // SUDOKU
@@ -295,158 +272,139 @@ function sudoku_cell(x, y, c) {
   return y * 81 + x * 9 + c - 90;
 }
 
-const sudoku_constraints = [];
+function sudoku(puzzle) {
+  const formula = [];
 
-// Each square must contain exactly one color.
-for(let y = 1; y < 10; y++) {
-  for(let x = 1; x < 10; x++) {
-    // At least one color.
-    sudoku_constraints.push([
-      sudoku_cell(x, y, 1),
-      sudoku_cell(x, y, 2),
-      sudoku_cell(x, y, 3),
-      sudoku_cell(x, y, 4),
-      sudoku_cell(x, y, 5),
-      sudoku_cell(x, y, 6),
-      sudoku_cell(x, y, 7),
-      sudoku_cell(x, y, 8),
-      sudoku_cell(x, y, 9),
-    ]);
+  // Each given cell is required.
+  for(let y = 1, i = 0; y < 10; y++) {
+    for(let x = 1; x < 10; x++, i++) {
+      const c = puzzle[i];
+      if(c >= 1) { formula.push([sudoku_cell(x, y, c)]); }
+    }
+  }
 
-    // At most one color.
-    for(let j = 2; j < 10; j++) {
-      for(let i = 1; i < j; i++) {
-        sudoku_constraints.push([-sudoku_cell(x, y, i), -sudoku_cell(x, y, j)]);
+  // Each square must contain exactly one color.
+  for(let y = 1; y < 10; y++) {
+    for(let x = 1; x < 10; x++) {
+      // At least one color.
+      formula.push([
+        sudoku_cell(x, y, 1),
+        sudoku_cell(x, y, 2),
+        sudoku_cell(x, y, 3),
+        sudoku_cell(x, y, 4),
+        sudoku_cell(x, y, 5),
+        sudoku_cell(x, y, 6),
+        sudoku_cell(x, y, 7),
+        sudoku_cell(x, y, 8),
+        sudoku_cell(x, y, 9),
+      ]);
+
+      // At most one color.
+      for(let j = 2; j < 10; j++) {
+        for(let i = 1; i < j; i++) {
+          formula.push([-sudoku_cell(x, y, i), -sudoku_cell(x, y, j)]);
+        }
       }
     }
   }
-}
 
-// Each row must contain each color.
-for(let y = 1; y < 10; y++) {
-  for(let c = 1; c < 10; c++) {
-    sudoku_constraints.push([
-      sudoku_cell(1, y, c),
-      sudoku_cell(2, y, c),
-      sudoku_cell(3, y, c),
-      sudoku_cell(4, y, c),
-      sudoku_cell(5, y, c),
-      sudoku_cell(6, y, c),
-      sudoku_cell(7, y, c),
-      sudoku_cell(8, y, c),
-      sudoku_cell(9, y, c),
-    ]);
-  }
-}
-
-// Each column must contain each color.
-for(let x = 1; x < 10; x++) {
-  for(let c = 1; c < 10; c++) {
-    sudoku_constraints.push([
-      sudoku_cell(x, 1, c),
-      sudoku_cell(x, 2, c),
-      sudoku_cell(x, 3, c),
-      sudoku_cell(x, 4, c),
-      sudoku_cell(x, 5, c),
-      sudoku_cell(x, 6, c),
-      sudoku_cell(x, 7, c),
-      sudoku_cell(x, 8, c),
-      sudoku_cell(x, 9, c),
-    ]);
-  }
-}
-
-// Each 3x3 block must contain each color.
-for(let y = 1; y < 10; y += 3) {
-  for(let x = 1; x < 10; x += 3) {
+  // Each row must contain each color.
+  for(let y = 1; y < 10; y++) {
     for(let c = 1; c < 10; c++) {
-      sudoku_constraints.push([
-        sudoku_cell(x + 0, y + 0, c),
-        sudoku_cell(x + 1, y + 0, c),
-        sudoku_cell(x + 2, y + 0, c),
-        sudoku_cell(x + 0, y + 1, c),
-        sudoku_cell(x + 1, y + 1, c),
-        sudoku_cell(x + 2, y + 1, c),
-        sudoku_cell(x + 0, y + 2, c),
-        sudoku_cell(x + 1, y + 2, c),
-        sudoku_cell(x + 2, y + 2, c),
+      formula.push([
+        sudoku_cell(1, y, c),
+        sudoku_cell(2, y, c),
+        sudoku_cell(3, y, c),
+        sudoku_cell(4, y, c),
+        sudoku_cell(5, y, c),
+        sudoku_cell(6, y, c),
+        sudoku_cell(7, y, c),
+        sudoku_cell(8, y, c),
+        sudoku_cell(9, y, c),
       ]);
     }
   }
-}
 
-function to_sudoku(solution) {
-  const chars = [
-    " ", " ", " ", "|", " ", " ", " ", "|", " ", " ", " ", "\n",
-    " ", " ", " ", "|", " ", " ", " ", "|", " ", " ", " ", "\n",
-    " ", " ", " ", "|", " ", " ", " ", "|", " ", " ", " ", "\n",
-    "-", "-", "-", "+", "-", "-", "-", "+", "-", "-", "-", "\n",
-    " ", " ", " ", "|", " ", " ", " ", "|", " ", " ", " ", "\n",
-    " ", " ", " ", "|", " ", " ", " ", "|", " ", " ", " ", "\n",
-    " ", " ", " ", "|", " ", " ", " ", "|", " ", " ", " ", "\n",
-    "-", "-", "-", "+", "-", "-", "-", "+", "-", "-", "-", "\n",
-    " ", " ", " ", "|", " ", " ", " ", "|", " ", " ", " ", "\n",
-    " ", " ", " ", "|", " ", " ", " ", "|", " ", " ", " ", "\n",
-    " ", " ", " ", "|", " ", " ", " ", "|", " ", " ", " ", "\n",
-  ];
-
-  for(let y of solution) {
-    if(!(y >= 1)) { continue; }
-
-    y -= 1;
-
-    const c = y % 9;
-    y = Math.floor((y - c) / 9);
-
-    const x = y % 9;
-    y = Math.floor((y - x) / 9);
-
-    let i = y * 12 + x;
-    if(x >= 3) { i +=  1; }
-    if(x >= 6) { i +=  1; }
-    if(y >= 3) { i += 12; }
-    if(y >= 6) { i += 12; }
-
-    chars[i] = c + 1;
+  // Each column must contain each color.
+  for(let x = 1; x < 10; x++) {
+    for(let c = 1; c < 10; c++) {
+      formula.push([
+        sudoku_cell(x, 1, c),
+        sudoku_cell(x, 2, c),
+        sudoku_cell(x, 3, c),
+        sudoku_cell(x, 4, c),
+        sudoku_cell(x, 5, c),
+        sudoku_cell(x, 6, c),
+        sudoku_cell(x, 7, c),
+        sudoku_cell(x, 8, c),
+        sudoku_cell(x, 9, c),
+      ]);
+    }
   }
 
-  return chars.join("");
+  // Each 3x3 block must contain each color.
+  for(let y = 1; y < 10; y += 3) {
+    for(let x = 1; x < 10; x += 3) {
+      for(let c = 1; c < 10; c++) {
+        formula.push([
+          sudoku_cell(x + 0, y + 0, c),
+          sudoku_cell(x + 1, y + 0, c),
+          sudoku_cell(x + 2, y + 0, c),
+          sudoku_cell(x + 0, y + 1, c),
+          sudoku_cell(x + 1, y + 1, c),
+          sudoku_cell(x + 2, y + 1, c),
+          sudoku_cell(x + 0, y + 2, c),
+          sudoku_cell(x + 1, y + 2, c),
+          sudoku_cell(x + 2, y + 2, c),
+        ]);
+      }
+    }
+  }
+
+  return formula;
 }
 
-// FIXME: This doesn't complete because my shitty toy SAT solver is garbage.
-// MiniSAT, which is a REAL solver, takes 1.3s to find a solution. If I wrote
-// a REAL solver in JS, it'd probably be an order of magnitude slower, and
-// that's at best. So my crappy toy solver isn't even in the same league and
-// would probably take hours to find a solution.
-//
-// Welp, I guess that means it's time to write a real solver.
-// This puzzle is taken from Gordon Royle's (now defunct) minimum Sudoku
-// collection[1]. With 17 clues, it's among the hardest Sudoku puzzles.
-//
-// [1]: http://school.maths.uwa.edu.au/~gordon/sudokumin.php
-console.time("Sudoku");
-console.log(
-  to_sudoku(
-    solve([
-      [sudoku_cell(8, 1, 1)],
-      [sudoku_cell(1, 2, 4)],
-      [sudoku_cell(2, 3, 2)],
-      [sudoku_cell(5, 4, 5)],
-      [sudoku_cell(7, 4, 4)],
-      [sudoku_cell(9, 4, 7)],
-      [sudoku_cell(3, 5, 8)],
-      [sudoku_cell(7, 5, 3)],
-      [sudoku_cell(3, 6, 1)],
-      [sudoku_cell(5, 6, 9)],
-      [sudoku_cell(1, 7, 3)],
-      [sudoku_cell(4, 7, 4)],
-      [sudoku_cell(7, 7, 2)],
-      [sudoku_cell(2, 8, 5)],
-      [sudoku_cell(4, 8, 1)],
-      [sudoku_cell(4, 9, 8)],
-      [sudoku_cell(6, 9, 6)],
-      ...sudoku_constraints,
+function to_sudoku_cells(move) {
+  const n = move.length;
+  const solution = new Array(81);
+
+  for(let i = 0, j = 0; i < n; i++) {
+    if(move[i] & 1) { continue; }
+    solution[j++] = (i % 9) + 1;
+  }
+
+  return solution;
+}
+
+assert_equal(
+  solve(
+    sudoku([
+      0, 0, 0,  0, 0, 0,  0, 1, 0,
+      4, 0, 0,  0, 0, 0,  0, 0, 0,
+      0, 2, 0,  0, 0, 0,  0, 0, 0,
+
+      0, 0, 0,  0, 5, 0,  4, 0, 7,
+      0, 0, 8,  0, 0, 0,  3, 0, 0,
+      0, 0, 1,  0, 9, 0,  0, 0, 0,
+
+      3, 0, 0,  4, 0, 0,  2, 0, 0,
+      0, 5, 0,  1, 0, 0,  0, 0, 0,
+      0, 0, 0,  8, 0, 6,  0, 0, 0,
     ]),
+    to_sudoku_cells,
   ),
+  [
+    6, 9, 3,  7, 8, 4,  5, 1, 2,
+    4, 8, 7,  5, 1, 2,  9, 3, 6,
+    1, 2, 5,  9, 6, 3,  8, 7, 4,
+
+    9, 3, 2,  6, 5, 1,  4, 8, 7,
+    5, 6, 8,  2, 4, 7,  3, 9, 1,
+    7, 4, 1,  3, 9, 8,  6, 2, 5,
+
+    3, 1, 9,  4, 7, 5,  2, 6, 8,
+    8, 5, 6,  1, 2, 9,  7, 4, 3,
+    2, 7, 4,  8, 3, 6,  1, 5, 9,
+  ],
+  "Should solve a hard Sudoku puzzle.",
 );
-console.timeEnd("Sudoku");
