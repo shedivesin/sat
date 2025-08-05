@@ -87,11 +87,8 @@ function solve(formula, mapper=to_dimacs) {
   }
 
   // BACKTRACKING SEARCH
-  // B1. Initialize.
-  let d = 0;
-
-  // B2. Rejoice or choose.
-  b2: while(d < n) {
+  // B1. Initialize. B2. Rejoice or choose.
+  for(let d = 0; d < n; d++) {
     move[d] = (watch[d << 1] >= m) | (watch[(d << 1) | 1] < m);
     let l = (d << 1) | move[d];
 
@@ -112,6 +109,7 @@ function solve(formula, mapper=to_dimacs) {
           next[j] = watch[l_p];
           watch[l_p] = j;
           j = j_p;
+          // FIXME: Is it possible to remove the need for this label?
           continue b3;
         }
       }
@@ -119,26 +117,22 @@ function solve(formula, mapper=to_dimacs) {
       // Can't stop watching -l.
       watch[l ^ 1] = j;
 
-      // B5. Try again.
-      for(;;) {
-        if(move[d] < 2) {
-          move[d] ^= 3;
-          // NB: This next line is subtle. Remember that we can enter here from
-          // B6, which may have changed d out from under us!
-          l = (d << 1) | (move[d] & 1);
-          j = watch[l ^ 1];
-          continue b3;
-        }
-
-        // B6. Backtrack.
+      // B6. Backtrack.
+      while(move[d] >= 2) {
         if(d < 1) { return null; } // UNSAT
         d--;
       }
+
+      // B5. Try again.
+      move[d] ^= 3;
+      // NB: This next line is subtle. Remember that we can enter here from
+      // B6, which may have changed d out from under us!
+      l = (d << 1) | (move[d] & 1);
+      j = watch[l ^ 1];
     }
 
     // B4. Advance.
     watch[l ^ 1] = m;
-    d++;
   }
 
   // CONVERT OUTPUT AND RETURN
