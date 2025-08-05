@@ -120,9 +120,11 @@ function solve(formula, mapper=to_dimacs) {
       watch[l ^ 1] = j;
 
       // B5. Try again.
-      b5: for(;;) {
+      for(;;) {
         if(move[d] < 2) {
           move[d] ^= 3;
+          // NB: This next line is subtle. Remember that we can enter here from
+          // B6, which may have changed d out from under us!
           l = (d << 1) | (move[d] & 1);
           j = watch[l ^ 1];
           continue b3;
@@ -142,6 +144,18 @@ function solve(formula, mapper=to_dimacs) {
   // CONVERT OUTPUT AND RETURN
   return mapper(move);
 }
+
+assert_equal(
+  solve([]),
+  [],
+  "Should solve an empty formula.",
+);
+
+assert_equal(
+  solve([[]]),
+  null,
+  "Should fail to solve a formula with an empty clause.",
+);
 
 assert_equal(
   solve([[1, 2], [-1, 3], [-3, 4], [1]]),
@@ -246,23 +260,29 @@ assert_equal(
   "Should fail to solve the 3-Queens puzzle.",
 );
 
+console.time("4-Queens");
 assert_equal(
   solve(n_queens(4), to_chess_notation),
   "a2 b4 c1 d3", // NB: One of 2 solutions.
   "Should solve the 4-Queens puzzle.",
 );
+console.timeEnd("4-Queens");
 
+console.time("8-Queens");
 assert_equal(
   solve(n_queens(8), to_chess_notation),
   "a3 b6 c4 d2 e8 f5 g7 h1", // NB: One of 92 solutions.
   "Should solve the 8-Queens puzzle.",
 );
+console.timeEnd("8-Queens");
 
+console.time("12-Queens");
 assert_equal(
   solve(n_queens(12), to_chess_notation),
   "a6 b8 c5 d11 e4 f10 g7 h3 i12 j2 k9 l1", // NB: One of 14,200 solutions.
   "Should solve the 12-Queens puzzle.",
 );
+console.timeEnd("12-Queens");
 
 
 // SUDOKU
@@ -376,6 +396,7 @@ function to_sudoku_cells(move) {
   return solution;
 }
 
+console.time("Sudoku");
 assert_equal(
   solve(
     sudoku([
@@ -408,3 +429,4 @@ assert_equal(
   ],
   "Should solve a hard Sudoku puzzle.",
 );
+console.timeEnd("Sudoku");
