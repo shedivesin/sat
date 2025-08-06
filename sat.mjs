@@ -19,6 +19,10 @@ import {deepStrictEqual as assert_equal} from "node:assert";
 // for the toy problems I'm playing with. (Honestly, if you want performance,
 // JavaScript isn't the way to implement your solution.)
 
+function to_bit(x) {
+  return ~x & 1;
+}
+
 function solve(formula) {
   // VALIDATE INPUT AND DETERMINE CNF PARAMETERS
   if(!Array.isArray(formula)) { throw new TypeError("Invalid formula"); }
@@ -124,7 +128,7 @@ function solve(formula) {
   }
 
   // CONVERT OUTPUT AND RETURN
-  return Array.from(move, x => ~x & 1);
+  return Array.from(move, to_bit);
 }
 
 assert_equal(
