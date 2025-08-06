@@ -57,8 +57,6 @@ function solve(formula, mapper=to_dimacs) {
   }
 
   // ALLOCATE AND INITIALIZE DATA STRUCTURES
-  // FIXME: I wonder if it's faster to simply have one Uint32Array and offsets
-  // into it...
   const buffer = new ArrayBuffer(p * 4 + m * 8 + n * 12 + 4);
   const literals = new Uint32Array(buffer, 0, p);
   const start = new Uint32Array(buffer, p * 4, m + 1);
