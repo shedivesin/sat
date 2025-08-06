@@ -19,17 +19,7 @@ import {deepStrictEqual as assert_equal} from "node:assert";
 // for the toy problems I'm playing with. (Honestly, if you want performance,
 // JavaScript isn't the way to implement your solution.)
 
-function to_dimacs(move) {
-  const n = move.length;
-  const solution = new Array(n);
-  for(let i = 0; i < n; i++) {
-    solution[i] = (i + 1) * (1 - ((move[i] & 1) << 1));
-  }
-
-  return solution;
-}
-
-function solve(formula, mapper=to_dimacs) {
+function solve(formula) {
   // VALIDATE INPUT AND DETERMINE CNF PARAMETERS
   if(!Array.isArray(formula)) { throw new TypeError("Invalid formula"); }
 
@@ -57,7 +47,7 @@ function solve(formula, mapper=to_dimacs) {
   }
 
   // ALLOCATE AND INITIALIZE DATA STRUCTURES
-  const buffer = new ArrayBuffer(p * 4 + m * 8 + n * 12 + 4);
+  const buffer = new ArrayBuffer((p + m * 2 + n * 3 + 1) << 2);
   const literals = new Uint32Array(buffer, 0, p);
   const start = new Uint32Array(buffer, p * 4, m + 1);
   const watch = new Uint32Array(buffer, p * 4 + m * 4 + 4, n * 2).fill(m);
@@ -134,7 +124,7 @@ function solve(formula, mapper=to_dimacs) {
   }
 
   // CONVERT OUTPUT AND RETURN
-  return mapper(move);
+  return Array.from(move, x => ~x & 1);
 }
 
 assert_equal(
@@ -151,7 +141,7 @@ assert_equal(
 
 assert_equal(
   solve([[1, 2], [-1, 3], [-3, 4], [1]]),
-  [1, 2, 3, 4],
+  [1, 1, 1, 1],
   "Should solve a simple 2SAT formula.",
 );
 
@@ -169,7 +159,7 @@ assert_equal(
     [1, 2, -3], [2, 3, -4], [1, 3, 4], [-1, 2, 4],
     [-1, -2, 3], [-2, -3, 4], [-3, -4, -1],
   ]),
-  [-1, 2, -3, 4], // NB: 3 can be positive or negative.
+  [0, 1, 0, 1], // NB: 3 can be positive or negative.
   "Should solve Knuth's eq. 7, \"nice test data.\""
 );
 
@@ -182,7 +172,7 @@ assert_equal(
     [4, 5, 6], [-4, -5, -6], [4, 6, 8], [-4, -6, -8],
     [5, 6, 7], [-5, -6, -7], [6, 7, 8], [-6, -7, -8],
   ]),
-  [-1, -2, 3, 4, -5, -6, 7, 8],
+  [0, 0, 1, 1, 0, 0, 1, 1],
   "Should solve Knuth's sample van der Waerden problem.",
 );
 
@@ -227,51 +217,62 @@ function n_queens(n) {
   return formula;
 }
 
-function to_chess_notation(move) {
-  const n = move.length;
-  const k = Math.floor(Math.sqrt(n));
-  if(!(k >= 1 && k < 27 && n === k * k)) { throw new Error("Invalid board size"); }
-
-  const squares = [];
-  for(let i = 0; i < n; i++) {
-    if(move[i] & 1) { continue; }
-
-    const x = i % k;
-    const y = Math.floor(i / k);
-    if(!(x >= 0 && x < k && y >= 0 && y < k)) { continue; }
-
-    squares.push(String.fromCharCode(97 + x) + (y + 1));
-  }
-
-  return squares.sort().join(" ");
-}
-
 assert_equal(
-  solve(n_queens(3), to_chess_notation),
+  solve(n_queens(3)),
   null,
   "Should fail to solve the 3-Queens puzzle.",
 );
 
 console.time("4-Queens");
 assert_equal(
-  solve(n_queens(4), to_chess_notation),
-  "a2 b4 c1 d3", // NB: One of 2 solutions.
+  solve(n_queens(4)),
+  // NB: One of 2 possible solutions.
+  [
+    0, 0, 1, 0,
+    1, 0, 0, 0,
+    0, 0, 0, 1,
+    0, 1, 0, 0,
+  ],
   "Should solve the 4-Queens puzzle.",
 );
 console.timeEnd("4-Queens");
 
 console.time("8-Queens");
 assert_equal(
-  solve(n_queens(8), to_chess_notation),
-  "a3 b6 c4 d2 e8 f5 g7 h1", // NB: One of 92 solutions.
+  solve(n_queens(8)),
+  // NB: One of 92 possible solutions.
+  [
+    0, 0, 0, 0, 0, 0, 0, 1,
+    0, 0, 0, 1, 0, 0, 0, 0,
+    1, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 1, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 1, 0, 0,
+    0, 1, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 1, 0,
+    0, 0, 0, 0, 1, 0, 0, 0,
+  ],
   "Should solve the 8-Queens puzzle.",
 );
 console.timeEnd("8-Queens");
 
 console.time("12-Queens");
 assert_equal(
-  solve(n_queens(12), to_chess_notation),
-  "a6 b8 c5 d11 e4 f10 g7 h3 i12 j2 k9 l1", // NB: One of 14,200 solutions.
+  solve(n_queens(12)),
+  // NB: One of 14,200 possible solutions.
+  [
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
+    0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
+    0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0,
+    0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
+  ],
   "Should solve the 12-Queens puzzle.",
 );
 console.timeEnd("12-Queens");
@@ -376,35 +377,46 @@ function sudoku(puzzle) {
   return formula;
 }
 
-function to_sudoku_cells(move) {
-  const n = move.length;
-  const solution = new Array(81);
+// FIXME: We should generalize this...
+function sudoku_group(solution) {
+  if(solution === null) { return null; }
 
-  for(let i = 0, j = 0; i < n; i++) {
-    if(move[i] & 1) { continue; }
-    solution[j++] = (i % 9) + 1;
+  let i = 0;
+
+  for(let j = 0; j < solution.length; i++, j += 9) {
+    solution[i] = solution[j + 0] * 1 +
+                  solution[j + 1] * 2 +
+                  solution[j + 2] * 3 +
+                  solution[j + 3] * 4 +
+                  solution[j + 4] * 5 +
+                  solution[j + 5] * 6 +
+                  solution[j + 6] * 7 +
+                  solution[j + 7] * 8 +
+                  solution[j + 8] * 9;
   }
 
+  solution.length = i;
   return solution;
 }
 
 console.time("Sudoku");
 assert_equal(
-  solve(
-    sudoku([
-      0, 0, 0,  0, 0, 0,  0, 1, 0,
-      4, 0, 0,  0, 0, 0,  0, 0, 0,
-      0, 2, 0,  0, 0, 0,  0, 0, 0,
+  sudoku_group(
+    solve(
+      sudoku([
+        0, 0, 0,  0, 0, 0,  0, 1, 0,
+        4, 0, 0,  0, 0, 0,  0, 0, 0,
+        0, 2, 0,  0, 0, 0,  0, 0, 0,
 
-      0, 0, 0,  0, 5, 0,  4, 0, 7,
-      0, 0, 8,  0, 0, 0,  3, 0, 0,
-      0, 0, 1,  0, 9, 0,  0, 0, 0,
+        0, 0, 0,  0, 5, 0,  4, 0, 7,
+        0, 0, 8,  0, 0, 0,  3, 0, 0,
+        0, 0, 1,  0, 9, 0,  0, 0, 0,
 
-      3, 0, 0,  4, 0, 0,  2, 0, 0,
-      0, 5, 0,  1, 0, 0,  0, 0, 0,
-      0, 0, 0,  8, 0, 6,  0, 0, 0,
-    ]),
-    to_sudoku_cells,
+        3, 0, 0,  4, 0, 0,  2, 0, 0,
+        0, 5, 0,  1, 0, 0,  0, 0, 0,
+        0, 0, 0,  8, 0, 6,  0, 0, 0,
+      ]),
+    ),
   ),
   [
     6, 9, 3,  7, 8, 4,  5, 1, 2,
