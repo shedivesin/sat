@@ -381,22 +381,17 @@ function sudoku(puzzle) {
   return formula;
 }
 
-// FIXME: We should generalize this...
-function sudoku_group(solution) {
+function collapse(solution, n) {
   if(solution === null) { return null; }
 
   let i = 0;
+  for(let j = 0; j < solution.length; i++) {
+    let sum = 0;
+    for(let k = 0; k < n; j++, k++) {
+      sum += solution[j] * (k + 1);
+    }
 
-  for(let j = 0; j < solution.length; i++, j += 9) {
-    solution[i] = solution[j + 0] * 1 +
-                  solution[j + 1] * 2 +
-                  solution[j + 2] * 3 +
-                  solution[j + 3] * 4 +
-                  solution[j + 4] * 5 +
-                  solution[j + 5] * 6 +
-                  solution[j + 6] * 7 +
-                  solution[j + 7] * 8 +
-                  solution[j + 8] * 9;
+    solution[i] = sum;
   }
 
   solution.length = i;
@@ -405,7 +400,7 @@ function sudoku_group(solution) {
 
 console.time("Sudoku");
 assert_equal(
-  sudoku_group(
+  collapse(
     solve(
       sudoku([
         0, 0, 0,  0, 0, 0,  0, 1, 0,
@@ -421,6 +416,7 @@ assert_equal(
         0, 0, 0,  8, 0, 6,  0, 0, 0,
       ]),
     ),
+    9,
   ),
   [
     6, 9, 3,  7, 8, 4,  5, 1, 2,
