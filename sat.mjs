@@ -52,6 +52,7 @@ function solve(formula) {
 
   // ALLOCATE AND INITIALIZE DATA STRUCTURES
   const buffer = new ArrayBuffer((p + m * 2 + n * 3 + 1) << 2);
+  // console.log("SAT problem of %d clss., %d vars., %d lits. Allocated %d KB.", m, n, p, Math.round(buffer.byteLength / 1024));
   const literals = new Uint32Array(buffer, 0, p);
   const start = new Uint32Array(buffer, p * 4, m + 1);
   const watch = new Uint32Array(buffer, p * 4 + m * 4 + 4, n * 2).fill(m);
@@ -289,16 +290,15 @@ function sudoku_cell(x, y, c) {
   return y * 81 + x * 9 + c - 90;
 }
 
+// Return a CNF formula for the given Sudoku puzzle.
+// NB: We overdetermine the puzzle by adding more constraints than is strictly
+// necessary, requiring that there's exactly one of a given color in each row,
+// column, and block. (We only technically NEED at least one of each color in
+// and at most one in each of the other groupings.) This makes a lot of binary
+// clauses, making the problem nearly 2SAT, which means unit propagation helps
+// a lot to reduce the search space.
 function sudoku(puzzle) {
   const formula = [];
-
-  // Each given cell is required.
-  for(let y = 1, i = 0; y < 10; y++) {
-    for(let x = 1; x < 10; x++, i++) {
-      const c = puzzle[i];
-      if(c >= 1) { formula.push([sudoku_cell(x, y, c)]); }
-    }
-  }
 
   // Each square must contain exactly one color.
   for(let y = 1; y < 10; y++) {
@@ -325,9 +325,10 @@ function sudoku(puzzle) {
     }
   }
 
-  // Each row must contain each color.
+  // Each row must contain exactly one color.
   for(let y = 1; y < 10; y++) {
     for(let c = 1; c < 10; c++) {
+      // At least one color.
       formula.push([
         sudoku_cell(1, y, c),
         sudoku_cell(2, y, c),
@@ -339,12 +340,20 @@ function sudoku(puzzle) {
         sudoku_cell(8, y, c),
         sudoku_cell(9, y, c),
       ]);
+
+      // At most one color.
+      for(let x = 2; x < 10; x++) {
+        for(let u = 1; u < x; u++) {
+          formula.push([-sudoku_cell(u, y, c), -sudoku_cell(x, y, c)]);
+        }
+      }
     }
   }
 
-  // Each column must contain each color.
+  // Each column must contain exactly one color.
   for(let x = 1; x < 10; x++) {
     for(let c = 1; c < 10; c++) {
+      // At least one color.
       formula.push([
         sudoku_cell(x, 1, c),
         sudoku_cell(x, 2, c),
@@ -356,13 +365,21 @@ function sudoku(puzzle) {
         sudoku_cell(x, 8, c),
         sudoku_cell(x, 9, c),
       ]);
+
+      // At most one color.
+      for(let y = 2; y < 10; y++) {
+        for(let v = 1; v < y; v++) {
+          formula.push([-sudoku_cell(x, v, c), -sudoku_cell(x, y, c)]);
+        }
+      }
     }
   }
 
-  // Each 3x3 block must contain each color.
+  // Each 3x3 block must contain exactly one color.
   for(let y = 1; y < 10; y += 3) {
     for(let x = 1; x < 10; x += 3) {
       for(let c = 1; c < 10; c++) {
+        // At least one color.
         formula.push([
           sudoku_cell(x + 0, y + 0, c),
           sudoku_cell(x + 1, y + 0, c),
@@ -374,7 +391,64 @@ function sudoku(puzzle) {
           sudoku_cell(x + 1, y + 2, c),
           sudoku_cell(x + 2, y + 2, c),
         ]);
+
+        // At most one color.
+        // FIXME: Yeah, the way I defined this means it's simpler to enumerate
+        // everything in one go than loop. Would be nice to clean it up.
+        formula.push(
+          [-sudoku_cell(x + 0, y + 0, c), -sudoku_cell(x + 1, y + 0, c)],
+          [-sudoku_cell(x + 0, y + 0, c), -sudoku_cell(x + 2, y + 0, c)],
+          [-sudoku_cell(x + 0, y + 0, c), -sudoku_cell(x + 0, y + 1, c)],
+          [-sudoku_cell(x + 0, y + 0, c), -sudoku_cell(x + 1, y + 1, c)],
+          [-sudoku_cell(x + 0, y + 0, c), -sudoku_cell(x + 2, y + 1, c)],
+          [-sudoku_cell(x + 0, y + 0, c), -sudoku_cell(x + 0, y + 2, c)],
+          [-sudoku_cell(x + 0, y + 0, c), -sudoku_cell(x + 1, y + 2, c)],
+          [-sudoku_cell(x + 0, y + 0, c), -sudoku_cell(x + 2, y + 2, c)],
+
+          [-sudoku_cell(x + 1, y + 0, c), -sudoku_cell(x + 2, y + 0, c)],
+          [-sudoku_cell(x + 1, y + 0, c), -sudoku_cell(x + 0, y + 1, c)],
+          [-sudoku_cell(x + 1, y + 0, c), -sudoku_cell(x + 1, y + 1, c)],
+          [-sudoku_cell(x + 1, y + 0, c), -sudoku_cell(x + 2, y + 1, c)],
+          [-sudoku_cell(x + 1, y + 0, c), -sudoku_cell(x + 0, y + 2, c)],
+          [-sudoku_cell(x + 1, y + 0, c), -sudoku_cell(x + 1, y + 2, c)],
+          [-sudoku_cell(x + 1, y + 0, c), -sudoku_cell(x + 2, y + 2, c)],
+
+          [-sudoku_cell(x + 2, y + 0, c), -sudoku_cell(x + 0, y + 1, c)],
+          [-sudoku_cell(x + 2, y + 0, c), -sudoku_cell(x + 1, y + 1, c)],
+          [-sudoku_cell(x + 2, y + 0, c), -sudoku_cell(x + 2, y + 1, c)],
+          [-sudoku_cell(x + 2, y + 0, c), -sudoku_cell(x + 0, y + 2, c)],
+          [-sudoku_cell(x + 2, y + 0, c), -sudoku_cell(x + 1, y + 2, c)],
+          [-sudoku_cell(x + 2, y + 0, c), -sudoku_cell(x + 2, y + 2, c)],
+
+          [-sudoku_cell(x + 0, y + 1, c), -sudoku_cell(x + 1, y + 1, c)],
+          [-sudoku_cell(x + 0, y + 1, c), -sudoku_cell(x + 2, y + 1, c)],
+          [-sudoku_cell(x + 0, y + 1, c), -sudoku_cell(x + 0, y + 2, c)],
+          [-sudoku_cell(x + 0, y + 1, c), -sudoku_cell(x + 1, y + 2, c)],
+          [-sudoku_cell(x + 0, y + 1, c), -sudoku_cell(x + 2, y + 2, c)],
+
+          [-sudoku_cell(x + 1, y + 1, c), -sudoku_cell(x + 2, y + 1, c)],
+          [-sudoku_cell(x + 1, y + 1, c), -sudoku_cell(x + 0, y + 2, c)],
+          [-sudoku_cell(x + 1, y + 1, c), -sudoku_cell(x + 1, y + 2, c)],
+          [-sudoku_cell(x + 1, y + 1, c), -sudoku_cell(x + 2, y + 2, c)],
+
+          [-sudoku_cell(x + 2, y + 1, c), -sudoku_cell(x + 0, y + 2, c)],
+          [-sudoku_cell(x + 2, y + 1, c), -sudoku_cell(x + 1, y + 2, c)],
+          [-sudoku_cell(x + 2, y + 1, c), -sudoku_cell(x + 2, y + 2, c)],
+
+          [-sudoku_cell(x + 0, y + 2, c), -sudoku_cell(x + 1, y + 2, c)],
+          [-sudoku_cell(x + 0, y + 2, c), -sudoku_cell(x + 2, y + 2, c)],
+
+          [-sudoku_cell(x + 1, y + 2, c), -sudoku_cell(x + 2, y + 2, c)],
+        );
       }
+    }
+  }
+
+  // Each given cell is required.
+  for(let y = 1, i = 0; y < 10; y++) {
+    for(let x = 1; x < 10; x++, i++) {
+      const c = puzzle[i];
+      if(c >= 1) { formula.push([sudoku_cell(x, y, c)]); }
     }
   }
 
