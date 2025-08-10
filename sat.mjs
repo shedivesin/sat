@@ -23,6 +23,8 @@ function to_bit(x) {
   return ~x & 1;
 }
 
+// FIXME: Now that SAT is almost unit prop, we may be justified in extending
+// this to Algorithm D (apply unit propagation).
 function solve(formula) {
   // VALIDATE INPUT AND DETERMINE CNF PARAMETERS
   if(!Array.isArray(formula)) { throw new TypeError("Invalid formula"); }
@@ -297,6 +299,12 @@ function sudoku_cell(x, y, c) {
 // and at most one in each of the other groupings.) This makes a lot of binary
 // clauses, making the problem nearly 2SAT, which means unit propagation helps
 // a lot to reduce the search space.
+// FIXME: The at most one of 9 constraint takes 56 literals in the binomial
+// encoding (used here) but only 54 literals in the commander encoding (using
+// 3 extra variables) and only 48 literals in the sequential counter encoding
+// (using 9 extra variables). Both of those encodings enforce arc consistency
+// (e.g. take advantage of unit propagation). It might be worth trying them,
+// though I imagine it's tinkering at the edges.
 function sudoku(puzzle) {
   const formula = [];
 
