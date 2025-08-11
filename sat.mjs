@@ -195,14 +195,21 @@ assert_equal(
 function n_queens(n) {
   const formula = [];
 
-  // There should be a queen in each row.
+  // There should be exactly one queen in each row.
   for(let y = 0; y < n; y++) {
+    // At least one.
     const row = new Array(n);
     for(let x = 0; x < n; x++) {
       row[x] = y * n + x + 1;
     }
-
     formula.push(row);
+
+    // At most one.
+    for(let x2 = 1; x2 < n; x2++) {
+      for(let x1 = 0; x1 < x2; x1++) {
+        formula.push([-(y * n + x1 + 1), -(y * n + x2 + 1)]);
+      }
+    }
   }
 
   // Each pair of squares in the same column or diagonal should have at least
@@ -307,6 +314,14 @@ function sudoku_cell(x, y, c) {
 // though I imagine it's tinkering at the edges.
 function sudoku(puzzle) {
   const formula = [];
+
+  // Each given cell is required.
+  for(let y = 1, i = 0; y < 10; y++) {
+    for(let x = 1; x < 10; x++, i++) {
+      const c = puzzle[i];
+      if(c >= 1) { formula.push([sudoku_cell(x, y, c)]); }
+    }
+  }
 
   // Each square must contain exactly one color.
   for(let y = 1; y < 10; y++) {
@@ -449,14 +464,6 @@ function sudoku(puzzle) {
           [-sudoku_cell(x + 1, y + 2, c), -sudoku_cell(x + 2, y + 2, c)],
         );
       }
-    }
-  }
-
-  // Each given cell is required.
-  for(let y = 1, i = 0; y < 10; y++) {
-    for(let x = 1; x < 10; x++, i++) {
-      const c = puzzle[i];
-      if(c >= 1) { formula.push([sudoku_cell(x, y, c)]); }
     }
   }
 
